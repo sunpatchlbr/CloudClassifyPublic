@@ -4,10 +4,10 @@ import os
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
-CLASSES = ['Cumulus','Sky']
+CLASSES = ['Cumulus','NEG']
 NUM_CLASSES = 2
 TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
-BOW_CLUSTERS = 6
+BOW_CLUSTERS = 5
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 20
 SVM_NUM_TRAINING_SAMPLES_PER_CLASS = 20
 
@@ -81,7 +81,7 @@ class CloudClassify(object):
         else:
             self._sift = cv.xfeatures2d.SIFT_create()
             
-            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=4)
             search_params = {}
             
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
@@ -114,7 +114,7 @@ class CloudClassify(object):
             self._svm = cv.ml.SVM_create()
             self._svm.setType(cv.ml.SVM_C_SVC)
             self._svm.setC(50)
-            #self._svm.setKernel(cv.ml.SVM_RBF)
+            self._svm.setKernel(cv.ml.SVM_RBF)
             self._svm.train(np.array(training_data), cv.ml.ROW_SAMPLE, np.array(training_labels))
             self._READY = True
             print("SVM READY")
@@ -144,31 +144,29 @@ class CloudClassify(object):
                         continue
                     prediction = self._svm.predict(descriptors)
                     class_id = prediction[1][0][0]
-                    print("predict: ", prediction)
+                    #print("predict: ", prediction)
                     raw_prediction = self._svm.predict(
                         descriptors,
                         flags=cv.ml.STAT_MODEL_RAW_OUTPUT)
                     score = -raw_prediction[1][0][0]
-                    print("raw: ", raw_prediction)
-                    if True: #class_id != 1.0: #or class_id != 2.0:
+                    #print("raw: ", raw_prediction)
+                    if True: # class_id == 0.0: #or class_id != 2.0:
                         if score > SVM_SCORE_THRESHOLD:
-                            class_name = CLASSES[int(class_id)]
+                            print(score)
                             h, w = roi.shape
-                            scale = gray_img.shape[0] / \
-                                float(resized.shape[0])
+                            scale = gray_img.shape[0] / float(resized.shape[0])
                             pos_rects.append([int(x * scale),
                                               int(y * scale),
                                               int((x+w) * scale),
                                               int((y+h) * scale),
-                                              class_name,
                                               score])
             pos_rects = nms(np.array(pos_rects), NMS_OVERLAP_THRESHOLD)
             #print('pos rects complete')
             print(pos_rects)
-            for x0, y0, x1, y1, class_id, score in pos_rects:
+            for x0, y0, x1, y1, score in pos_rects:
                 cv.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)),
                               (0, 255, 255), 2)
-                text = class_name + ": " + ('%.2f' % score)
+                text = ('%.2f' % score)
                 cv.putText(img, text, (int(x0), int(y0) - 20),
                             cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
             cv.imshow(TEST_PATH, img)
@@ -178,7 +176,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=50, window_size=(150, 100)):
+    def sliding_window(self, img, step=75, window_size=(300, 200)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):

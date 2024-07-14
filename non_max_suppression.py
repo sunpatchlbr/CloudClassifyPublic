@@ -17,7 +17,7 @@ def non_max_suppression_fast(boxes, overlapThresh):
     y1 = boxes[:,1]
     x2 = boxes[:,2]
     y2 = boxes[:,3]
-    scores = boxes[:,5]
+    scores = boxes[:,4]
     # compute the area of the bounding boxes and sort the bounding
     # boxes by the score/probability of the bounding box
     area = (x2 - x1 + 1) * (y2 - y1 + 1)
