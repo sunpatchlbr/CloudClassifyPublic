@@ -3,9 +3,9 @@ import numpy as np
 import os    
 from non_max_suppression import non_max_suppression_fast as nms
 
-CUM_DATA_PATH = '../../Data/TestPhotos/Cumuliform/Cumulus/'
-NEG_DATA_PATH = '../../Data/Noise/'
-TEST_PATH = 'ress.JPG'
+CUM_DATA_PATH = '../../Data/TestPhotos/Cumulus/'
+NEG_DATA_PATH = '../../Data/TestPhotos/NEG/'
+TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 20
 SVM_NUM_TRAINING_SAMPLES_PER_CLASS = 200
 CLASSES = ['cumulus','altocumulus','cumulonimbus','stratocumulus','stratus','cirrostratus','cirrus','cirrocumulus']
@@ -33,7 +33,7 @@ else:
         bow_extractor = cv.BOWImgDescriptorExtractor(sift, flann)
 
         def get_path_data(i):
-            pos_path = CUM_DATA_PATH + "CUM" + str(i) + "R.JPG"
+            pos_path = CUM_DATA_PATH + "Cumulus" + str(i) + "R.JPG"
             neg_path = NEG_DATA_PATH + "NEG" + str(i) + "R.JPG"
             return pos_path, neg_path
 
@@ -127,7 +127,7 @@ else:
                     
                     score = -raw_prediction[1][0][0]
 
-                    #print("score: ", score)
+                    print("raw: ", raw_prediction)
                     
                     if score > SVM_SCORE_THRESHOLD:
                         h, w = roi.shape

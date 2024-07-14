@@ -4,9 +4,9 @@ import os
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
-CLASSES = ['Cumulus','Sky','NEG']
-NUM_CLASSES = 3
-TEST_PATH = 'TEST.JPG'
+CLASSES = ['Cumulus','Sky']
+NUM_CLASSES = 2
+TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
 BOW_CLUSTERS = 6
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 20
 SVM_NUM_TRAINING_SAMPLES_PER_CLASS = 20
@@ -92,7 +92,7 @@ class CloudClassify(object):
             for class_name in CLASSES:
                 for i in range(BOW_NUM_TRAINING_SAMPLES_PER_CLASS):
                     path = self.get_path_data(class_name, i+1)
-                    print("PATH: ", path)
+                    #print("PATH: ", path)
                     self.add_sample(path)
 
             voc = self._bow_kmeans_trainer.cluster()
@@ -102,11 +102,9 @@ class CloudClassify(object):
             training_labels = []
 
             for c in range(NUM_CLASSES):
-                class_name = CLASSES[int(c)]
-                print(class_name, ": ")
+                class_name = CLASSES[c]
                 for i in range(SVM_NUM_TRAINING_SAMPLES_PER_CLASS):
                     path = self.get_path_data(class_name, i+1)
-                    print(i+1)
                     dimg = cv.imread(path,cv.IMREAD_GRAYSCALE)
                     descriptors = self.extract_bow_descriptors(dimg)
                     if descriptors is not None:
@@ -115,7 +113,8 @@ class CloudClassify(object):
 
             self._svm = cv.ml.SVM_create()
             self._svm.setType(cv.ml.SVM_C_SVC)
-            self._svm.setC(40)
+            self._svm.setC(50)
+            #self._svm.setKernel(cv.ml.SVM_RBF)
             self._svm.train(np.array(training_data), cv.ml.ROW_SAMPLE, np.array(training_labels))
             self._READY = True
             print("SVM READY")
@@ -144,16 +143,16 @@ class CloudClassify(object):
                     if descriptors is None:
                         continue
                     prediction = self._svm.predict(descriptors)
-                    print("p: ", prediction)
                     class_id = prediction[1][0][0]
+                    print("predict: ", prediction)
                     raw_prediction = self._svm.predict(
-                            descriptors, 
-                            flags=cv.ml.STAT_MODEL_RAW_OUTPUT)
+                        descriptors,
+                        flags=cv.ml.STAT_MODEL_RAW_OUTPUT)
                     score = -raw_prediction[1][0][0]
-                    print("score: ", score)
-                    if class_id != 1.0 or class_id != 2.0:
+                    print("raw: ", raw_prediction)
+                    if True: #class_id != 1.0: #or class_id != 2.0:
                         if score > SVM_SCORE_THRESHOLD:
-                            class_name = CLASSES[class_id]
+                            class_name = CLASSES[int(class_id)]
                             h, w = roi.shape
                             scale = gray_img.shape[0] / \
                                 float(resized.shape[0])
@@ -164,9 +163,9 @@ class CloudClassify(object):
                                               class_name,
                                               score])
             pos_rects = nms(np.array(pos_rects), NMS_OVERLAP_THRESHOLD)
-            print('pos rects complete')
+            #print('pos rects complete')
             print(pos_rects)
-            for x0, y0, x1, y1, class_name, score in pos_rects:
+            for x0, y0, x1, y1, class_id, score in pos_rects:
                 cv.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)),
                               (0, 255, 255), 2)
                 text = class_name + ": " + ('%.2f' % score)
@@ -192,8 +191,8 @@ class CloudClassify(object):
     def pyramid(self, img, scale_factor=2, min_size=(300, 500),
                 max_size=(3000, 3000)):
         h, w = img.shape
-        print("current h:", h)
-        print("current w:", w)
+        #print("current h:", h)
+        #print("current w:", w)
         min_w, min_h = min_size
         max_w, max_h = max_size
         while w >= min_w and h >= min_h:
