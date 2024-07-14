@@ -6,7 +6,6 @@ from non_max_suppression import non_max_suppression_fast as nms
 DATA_PATH = '../../Data/TestPhotos/'
 CLASSES = ['Cumulus','Sky','NEG']
 NUM_CLASSES = 3
-#['Cumulus','Altocumulus','Cumulonimbus','Stratocumulus','Stratus','Cirrostratus','Cirrus','Cirrocumulus']
 TEST_PATH = 'TEST.JPG'
 BOW_CLUSTERS = 6
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 20
