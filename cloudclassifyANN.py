@@ -86,22 +86,23 @@ class CloudClassify(object):
                 for i in range(ANN_NUM_TRAINING_SAMPLES_PER_CLASS):
                     current = cv.imread(self.get_path_data(class_name, i))
                     descriptors = self.extract_bow_descriptors(current)
+                    if descriptors is None:
+                        continue
+                    sample = descriptors[0]
                     identity = np.zeros(NUM_CLASSES)
                     identity[c] = 1.0
-                    record = self.record(descriptors, identity)
+                    record = self.record(sample, identity)
                     records.append(record)
 
             for e in range(EPOCHS):
                 print("epoch: %d" % e)
                 for t, c in records:
-                    print("t: ", t)
-                    print("c: ", c)
                     data = cv.ml.TrainData_create(t, cv.ml.ROW_SAMPLE, c)
                     if self._ann.isTrained():
                         self._ann.train(data, cv.ml.ANN_MLP_UPDATE_WEIGHTS | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
                     else:
                         self._ann.train(data, cv.ml.ANN_MLP_NO_INPUT_SCALE | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
-            
+            self._READY = True
             print("ANN READY")
                 
 
@@ -123,26 +124,17 @@ class CloudClassify(object):
             pos_rects = []
             for resized in self.pyramid(gray_img):
                 print("resized: ", resized.shape)
+                print("layers: ", self._ann.getLayerSizes())
                 for x, y, roi in self.sliding_window(resized):
-                    descriptors = np.array(self.extract_bow_descriptors(roi), np.float32)
-                    print("desc: ", descriptors)
+                    descriptors = self.extract_bow_descriptors(roi)
                     if descriptors is None:
                         continue
+                    print("desc: ", descriptors[0])
+                    print("desc shape: ", descriptors[0].shape)
                     prediction = self._ann.predict(descriptors)
                     class_id = int(prediction[0])
                     print("prediction: ", prediction)
-                    #if True: # class_id == 0.0: #or class_id != 2.0:
-                    #    if score > SVM_SCORE_THRESHOLD:
-                    #        print(score)
-                    #        h, w = roi.shape
-                    #        scale = gray_img.shape[0] / float(resized.shape[0])
-                    #        pos_rects.append([int(x * scale),
-                    #                          int(y * scale),
-                    #                          int((x+w) * scale),
-                    #                          int((y+h) * scale),
-                    #                          score])
             pos_rects = nms(np.array(pos_rects), NMS_OVERLAP_THRESHOLD)
-            #print('pos rects complete')
             print(pos_rects)
             for x0, y0, x1, y1, score in pos_rects:
                 cv.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)),
@@ -170,8 +162,6 @@ class CloudClassify(object):
     def pyramid(self, img, scale_factor=2, min_size=(300, 500),
                 max_size=(3000, 3000)):
         h, w = img.shape
-        #print("current h:", h)
-        #print("current w:", w)
         min_w, min_h = min_size
         max_w, max_h = max_size
         while w >= min_w and h >= min_h:
