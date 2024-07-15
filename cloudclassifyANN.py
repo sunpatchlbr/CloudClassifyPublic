@@ -4,15 +4,16 @@ import os
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
-CLASSES = ['Cumulus','NEG']
-NUM_CLASSES = 2
+CLASSES = ['NEG','Sky','Cumulus']
+NUM_CLASSES = 3
 TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
 BOW_CLUSTERS = 5
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 20
-SVM_NUM_TRAINING_SAMPLES_PER_CLASS = 20
+ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 20
 
 FLANN_INDEX_KDTREE = 1
-SVM_SCORE_THRESHOLD = 1.8
+EPOCHS = 10
+ANN_CONF_THRESHOLD = 0.9
 NMS_OVERLAP_THRESHOLD = 0.1
 
 class CloudClassify(object):
@@ -25,7 +26,7 @@ class CloudClassify(object):
         self._flann = None
         self._bow_kmeans_trainer = None
         self._bow_extractor = None
-        self._svm = None
+        self._ann = None
         self._sky = None
         self._output = None
         self._READY = False
@@ -36,36 +37,6 @@ class CloudClassify(object):
         else:
             self._inputImage = cv.imread(inputFileName)
             self.detect_and_classify(self._inputImage)
-        
-    def isolate_sky(self, originalImg, fg_proportion=0.4):
-        print("Isolating sky from foreground...")
-
-        cv.namedWindow("og", cv.WINDOW_NORMAL)
-        cv.imshow("og", originalImg)
-
-        mask = np.zeros(originalImg.shape[:2], np.uint8)
-
-        height = originalImg.shape[0]
-
-        fg_height = int(float(height) * fg_proportion)
-        
-        width = originalImg.shape[1]
-
-        print("Height: ", height)
-        print("Width: ", width)
-
-        bgdModel = np.zeros((1, 65), np.float64)
-        fgdModel = np.zeros((1, 65), np.float64)
-
-        rect = (0,height-fg_height, width, fg_height)
-        
-        cv.grabCut(originalImg, mask, rect, bgdModel, fgdModel, 15, cv.GC_INIT_WITH_RECT)
-
-        obviousSkyMask = np.where((mask==2)|(mask==0), 1, 0).astype('uint8')
-
-        obviousSky = originalImg*obviousSkyMask[:,:,np.newaxis]
-
-        return obviousSky
 
     def get_path_data(self, data_class, i):
         path = DATA_PATH + data_class + "/" + data_class + str(i) + "R.JPG"
@@ -73,6 +44,10 @@ class CloudClassify(object):
                 
     def train(self):
         self.initialize_classifiers()
+
+    def record(self, sample, classification):
+        return (np.array([sample], np.float32),
+                np.array([classification], np.float32))
 
     def initialize_classifiers(self):
         if not os.path.isdir(DATA_PATH):
@@ -98,26 +73,36 @@ class CloudClassify(object):
             voc = self._bow_kmeans_trainer.cluster()
             self._bow_extractor.setVocabulary(voc)
 
-            training_data = []
-            training_labels = []
+            self._ann = cv.ml.ANN_MLP_create()
+            self._ann.setLayerSizes(np.array([BOW_CLUSTERS,75,NUM_CLASSES])) # input are bow descriptors, output are classes
+            self._ann.setActivationFunction(cv.ml.ANN_MLP_SIGMOID_SYM, 0.6, 1.0)
+            self._ann.setTrainMethod(cv.ml.ANN_MLP_BACKPROP, 0.1, 0.1)
+            self._ann.setTermCriteria((cv.TERM_CRITERIA_MAX_ITER | cv.TERM_CRITERIA_EPS, 100, 1.0))
+
+            records = []
 
             for c in range(NUM_CLASSES):
                 class_name = CLASSES[c]
-                for i in range(SVM_NUM_TRAINING_SAMPLES_PER_CLASS):
-                    path = self.get_path_data(class_name, i+1)
-                    dimg = cv.imread(path,cv.IMREAD_GRAYSCALE)
-                    descriptors = self.extract_bow_descriptors(dimg)
-                    if descriptors is not None:
-                        training_data.extend(descriptors)
-                        training_labels.append(c)
+                for i in range(ANN_NUM_TRAINING_SAMPLES_PER_CLASS):
+                    current = cv.imread(self.get_path_data(class_name, i))
+                    descriptors = self.extract_bow_descriptors(current)
+                    identity = np.zeros(NUM_CLASSES)
+                    identity[c] = 1.0
+                    record = self.record(descriptors, identity)
+                    records.append(record)
 
-            self._svm = cv.ml.SVM_create()
-            self._svm.setType(cv.ml.SVM_C_SVC)
-            self._svm.setC(50)
-            self._svm.setKernel(cv.ml.SVM_RBF)
-            self._svm.train(np.array(training_data), cv.ml.ROW_SAMPLE, np.array(training_labels))
-            self._READY = True
-            print("SVM READY")
+            for e in range(EPOCHS):
+                print("epoch: %d" % e)
+                for t, c in records:
+                    print("t: ", t)
+                    print("c: ", c)
+                    data = cv.ml.TrainData_create(t, cv.ml.ROW_SAMPLE, c)
+                    if self._ann.isTrained():
+                        self._ann.train(data, cv.ml.ANN_MLP_UPDATE_WEIGHTS | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
+                    else:
+                        self._ann.train(data, cv.ml.ANN_MLP_NO_INPUT_SCALE | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
+            
+            print("ANN READY")
                 
 
     def extract_bow_descriptors(self, img):
@@ -139,28 +124,23 @@ class CloudClassify(object):
             for resized in self.pyramid(gray_img):
                 print("resized: ", resized.shape)
                 for x, y, roi in self.sliding_window(resized):
-                    descriptors = self.extract_bow_descriptors(roi)
+                    descriptors = np.array(self.extract_bow_descriptors(roi), np.float32)
                     print("desc: ", descriptors)
                     if descriptors is None:
                         continue
-                    prediction = self._svm.predict(descriptors)
-                    class_id = prediction[1][0][0]
-                    #print("predict: ", prediction)
-                    raw_prediction = self._svm.predict(
-                        descriptors,
-                        flags=cv.ml.STAT_MODEL_RAW_OUTPUT)
-                    score = -raw_prediction[1][0][0]
-                    #print("raw: ", raw_prediction)
-                    if True: # class_id == 0.0: #or class_id != 2.0:
-                        if score > SVM_SCORE_THRESHOLD:
-                            print(score)
-                            h, w = roi.shape
-                            scale = gray_img.shape[0] / float(resized.shape[0])
-                            pos_rects.append([int(x * scale),
-                                              int(y * scale),
-                                              int((x+w) * scale),
-                                              int((y+h) * scale),
-                                              score])
+                    prediction = self._ann.predict(descriptors)
+                    class_id = int(prediction[0])
+                    print("prediction: ", prediction)
+                    #if True: # class_id == 0.0: #or class_id != 2.0:
+                    #    if score > SVM_SCORE_THRESHOLD:
+                    #        print(score)
+                    #        h, w = roi.shape
+                    #        scale = gray_img.shape[0] / float(resized.shape[0])
+                    #        pos_rects.append([int(x * scale),
+                    #                          int(y * scale),
+                    #                          int((x+w) * scale),
+                    #                          int((y+h) * scale),
+                    #                          score])
             pos_rects = nms(np.array(pos_rects), NMS_OVERLAP_THRESHOLD)
             #print('pos rects complete')
             print(pos_rects)
@@ -201,3 +181,33 @@ class CloudClassify(object):
             h /= scale_factor
             img = cv.resize(img, (int(w), int(h)),
                              interpolation=cv.INTER_AREA)
+
+    def isolate_sky(self, originalImg, fg_proportion=0.4):
+        print("Isolating sky from foreground...")
+
+        cv.namedWindow("og", cv.WINDOW_NORMAL)
+        cv.imshow("og", originalImg)
+
+        mask = np.zeros(originalImg.shape[:2], np.uint8)
+
+        height = originalImg.shape[0]
+
+        fg_height = int(float(height) * fg_proportion)
+        
+        width = originalImg.shape[1]
+
+        print("Height: ", height)
+        print("Width: ", width)
+
+        bgdModel = np.zeros((1, 65), np.float64)
+        fgdModel = np.zeros((1, 65), np.float64)
+
+        rect = (0,height-fg_height, width, fg_height)
+        
+        cv.grabCut(originalImg, mask, rect, bgdModel, fgdModel, 15, cv.GC_INIT_WITH_RECT)
+
+        obviousSkyMask = np.where((mask==2)|(mask==0), 1, 0).astype('uint8')
+
+        obviousSky = originalImg*obviousSkyMask[:,:,np.newaxis]
+
+        return obviousSky
