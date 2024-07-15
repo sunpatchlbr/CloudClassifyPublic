@@ -4,17 +4,19 @@ import os
 import sys
 import cloudclassifyANN as cc
 
-CLUSTERS = 15
+CLUSTERS = 12
+HIDDEN_LAYERS = [75,32]
 
-EPOCHS = 15
+EPOCHS = 20
 
-CONF_THRESH = 0.6
-SKY_THRESH = 0.1
-NEG_THRESH = 0.1
+CONF_THRESH = 0.4
+SKY_THRESH = 1
+NEG_THRESH = 1
 
-NMS_THRESH = 0.3
+NMS_THRESH = 0.25
 
 TEST_LOCATION = '../../Data/TestPhotos/BackgroundTest/'
+OUTPUT_LOCATION = '../../Data/Outputs/'
 TEST_FILES = ['IFAK4250.JPG','TEST.JPG','test6.JPG', 'test11.JPG', 'test12.JPG']
 
 cloud = cc.CloudClassify()
@@ -24,9 +26,10 @@ cloud.set_parameters(
     sky_conf = SKY_THRESH,
     neg_conf = NEG_THRESH,
     nms_thresh = NMS_THRESH)
-cloud.set_architecture(15, [64]) # output layer (num classes) not allowed to change
+cloud.set_architecture(12, HIDDEN_LAYERS) # output layer (num classes) not allowed to change
 cloud.train()
 
 for test in TEST_FILES:
     test_path = TEST_LOCATION + test
-    cloud.run(test_path)
+    output = cloud.run(test_path,resize_it=False)
+    cv.imwrite(OUTPUT_LOCATION+test, output)

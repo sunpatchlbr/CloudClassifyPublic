@@ -43,13 +43,14 @@ class CloudClassify(object):
         self._output = None
         self._READY = False
         
-    def run(self, inputFileName=TEST_PATH):
-        if not os.path.exists(inputFileName):
+    def run(self, inputFilePath=TEST_PATH, resize_it=False):
+        if not os.path.exists(inputFilePath):
             print("Couldn't find input image file")
         else:
-            self._inputImage = cv.imread(inputFileName)
-            self._inputImage = self.resizeInput(self._inputImage, MAX_HEIGHT)
-            self.detect_and_classify(self._inputImage)
+            self._resize_it = resize_it
+            self._inputImage = cv.imread(inputFilePath)
+            self._inputImage = self.resizeInput(self._inputImage, MAX_HEIGHT, resize_it)
+            return self.detect_and_classify(self._inputImage, inputFilePath)
 
     def get_path_data(self, data_class, i):
         path = DATA_PATH + data_class + "/" + data_class + str(i) + "R.JPG"
@@ -68,8 +69,11 @@ class CloudClassify(object):
 
     def set_architecture(self, clusters, inner_layers):
         self._BOW_CLUSTERS = clusters
-        inner_layers.append(NUM_CLASSES)
-        self._ANN_LAYERS = (np.array(clusters,int)).extend(inner_layers)
+        layers = [self._BOW_CLUSTERS]
+        layers.extend(inner_layers)
+        layers.append(NUM_CLASSES)
+        print(layers)
+        self._ANN_LAYERS = layers
         
 
     def record(self, sample, classification):
@@ -88,7 +92,7 @@ class CloudClassify(object):
             
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
 
-            self._bow_kmeans_trainer = cv.BOWKMeansTrainer(BOW_CLUSTERS)
+            self._bow_kmeans_trainer = cv.BOWKMeansTrainer(self._BOW_CLUSTERS)
             self._bow_extractor = cv.BOWImgDescriptorExtractor(self._sift, self._flann)
 
             for class_name in CLASSES:
@@ -100,10 +104,11 @@ class CloudClassify(object):
             self._bow_extractor.setVocabulary(voc)
 
             self._ann = cv.ml.ANN_MLP_create()
-            self._ann.setLayerSizes(np.array(ANN_LAYERS))
+            self._ann.setLayerSizes(np.array(self._ANN_LAYERS))
             self._ann.setActivationFunction(cv.ml.ANN_MLP_SIGMOID_SYM, 0.6, 1.0)
             self._ann.setTrainMethod(cv.ml.ANN_MLP_BACKPROP, 0.1, 0.1)
-            self._ann.setTermCriteria((cv.TERM_CRITERIA_MAX_ITER | cv.TERM_CRITERIA_EPS, 100, 1.0))
+            self._ann.setTermCriteria(
+                (cv.TERM_CRITERIA_MAX_ITER | cv.TERM_CRITERIA_EPS, 100, 1.0))
 
             records = []
 
@@ -120,14 +125,18 @@ class CloudClassify(object):
                     record = self.record(sample, identity)
                     records.append(record)
 
-            for e in range(EPOCHS):
+            for e in range(self._EPOCHS):
                 print("epoch: %d" % e)
                 for t, c in records:
                     data = cv.ml.TrainData_create(t, cv.ml.ROW_SAMPLE, c)
                     if self._ann.isTrained():
-                        self._ann.train(data, cv.ml.ANN_MLP_UPDATE_WEIGHTS | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
+                        self._ann.train(
+                            data,
+                            cv.ml.ANN_MLP_UPDATE_WEIGHTS | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
                     else:
-                        self._ann.train(data, cv.ml.ANN_MLP_NO_INPUT_SCALE | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
+                        self._ann.train(
+                            data,
+                            cv.ml.ANN_MLP_NO_INPUT_SCALE | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
             self._READY = True
             print("ANN READY")
                 
@@ -143,7 +152,7 @@ class CloudClassify(object):
         if descriptors is not None:
             self._bow_kmeans_trainer.add(descriptors)
     
-    def detect_and_classify(self, img):
+    def detect_and_classify(self, img, inputPath):
         if self._READY:
             print("Detecting and classifying clouds in sky...")
             gray_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
@@ -159,7 +168,9 @@ class CloudClassify(object):
                     confidence = prediction[1][0][class_id]
                     sky_conf = abs(prediction[1][0][1])
                     NEG_conf = abs(prediction[1][0][0])
-                    if confidence > ANN_CONF_THRESHOLD and sky_conf < SKY_THRESH and NEG_conf < NEG_THRESH:
+                    if confidence > self._ANN_CONF_THRESHOLD \
+                       and sky_conf < self._SKY_THRESH \
+                       and NEG_conf < self._NEG_THRESH:
                         h, w = roi.shape
                         scale = gray_img.shape[0] / \
                             float(resized.shape[0])
@@ -172,24 +183,25 @@ class CloudClassify(object):
                              sky_conf,
                              NEG_conf,
                              class_id])
-            pos_rects = nms(np.array(pos_rects), NMS_OVERLAP_THRESHOLD)
-            print(pos_rects)
+            pos_rects = nms(np.array(pos_rects), self._NMS_OVERLAP_THRESHOLD)
+            print("positives: ", pos_rects)
             for x0, y0, x1, y1, score, sky_conf, NEG_conf, class_id in pos_rects:
                 cv.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)),
-                              (0, 255, 255), 2)
+                              (100, 255, 100), 4)
                 text = CLASSES[int(class_id)] + ' ' \
                     + ('%.2f' % score) + ' ' + ('%.2f' % sky_conf) \
                     + ' ' + ('%.2f' % NEG_conf)
                 cv.putText(img, text, (int(x0), int(y0) - 20),
-                            cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-            cv.imshow(TEST_PATH, img)
-            cv.waitKey(0)
+                            cv.FONT_HERSHEY_SIMPLEX, 1, (100, 255, 100), 4)
+            #cv.imshow(inputPath, img)
+            #cv.waitKey(0)
+            return img
         else:
             print("not trained")
             exit(1)
         
 
-    def sliding_window(self, img, step=40, window_size=(150, 100)):
+    def sliding_window(self, img, step=45, window_size=(150, 100)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -199,7 +211,7 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.5, min_size=(300, 300),
+    def pyramid(self, img, scale_factor=1.7, min_size=(300, 300),
                 max_size=(2000, 2000)):
         h, w = img.shape
         min_w, min_h = min_size
@@ -211,8 +223,8 @@ class CloudClassify(object):
             h /= scale_factor
             img = cv.resize(img, (int(w), int(h)),
                              interpolation=cv.INTER_AREA)
-    def resizeInput(self, img, limit):
-        if (img.shape[0] > limit):
+    def resizeInput(self, img, limit, toggle):
+        if toggle and (img.shape[0] > limit):
             factor = float(limit) / float(img.shape[0])
             factor = factor * factor
             img = cv.resize(img, (0, 0), fx = factor, fy = factor)
