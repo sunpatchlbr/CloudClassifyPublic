@@ -4,14 +4,14 @@ import os
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
-CLASSES = ['NEG','Sky','Cumulus']
+CLASSES = ['NEG','Sky','Cumulus','Altocumulus','Cumulostratus','Cirrus']
 NUM_CLASSES = 3
 TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
 
 MAX_HEIGHT = 1100
 
-BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 20
-ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 20
+BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 30
+ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 30
 
 FLANN_INDEX_KDTREE = 1
 
@@ -146,6 +146,7 @@ class CloudClassify(object):
         return self._bow_extractor.compute(img, features)
 
     def add_sample(self, path):
+        #print("path: ", path)
         current = cv.imread(path, cv.IMREAD_GRAYSCALE)
         current.astype('uint8')
         keypoints, descriptors = self._sift.detectAndCompute(current, None)
@@ -168,9 +169,10 @@ class CloudClassify(object):
                     confidence = prediction[1][0][class_id]
                     sky_conf = abs(prediction[1][0][1])
                     NEG_conf = abs(prediction[1][0][0])
-                    if confidence > self._ANN_CONF_THRESHOLD \
+                    if ( confidence > self._ANN_CONF_THRESHOLD \
                        and sky_conf < self._SKY_THRESH \
-                       and NEG_conf < self._NEG_THRESH:
+                       and NEG_conf < self._NEG_THRESH ) or \
+                       class_id == 5:
                         h, w = roi.shape
                         scale = gray_img.shape[0] / \
                             float(resized.shape[0])
@@ -184,7 +186,7 @@ class CloudClassify(object):
                              NEG_conf,
                              class_id])
             pos_rects = nms(np.array(pos_rects), self._NMS_OVERLAP_THRESHOLD)
-            print("positives: ", pos_rects)
+            #print("positives: ", pos_rects)
             for x0, y0, x1, y1, score, sky_conf, NEG_conf, class_id in pos_rects:
                 cv.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)),
                               (100, 255, 100), 4)
@@ -193,8 +195,6 @@ class CloudClassify(object):
                     + ' ' + ('%.2f' % NEG_conf)
                 cv.putText(img, text, (int(x0), int(y0) - 20),
                             cv.FONT_HERSHEY_SIMPLEX, 1, (100, 255, 100), 4)
-            #cv.imshow(inputPath, img)
-            #cv.waitKey(0)
             return img
         else:
             print("not trained")
