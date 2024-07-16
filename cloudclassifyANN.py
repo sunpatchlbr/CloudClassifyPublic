@@ -201,7 +201,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=45, window_size=(150, 100)):
+    def sliding_window(self, img, step=50, window_size=(150, 100)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -211,8 +211,8 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.7, min_size=(300, 300),
-                max_size=(2000, 2000)):
+    def pyramid(self, img, scale_factor=1.8, min_size=(500, 500),
+                max_size=(2500, 2500)):
         h, w = img.shape
         min_w, min_h = min_size
         max_w, max_h = max_size
