@@ -32,7 +32,8 @@ class CloudClassify(object):
         
         self._EPOCHS = 20
         self._ANN_CONF_THRESHOLD = 0.3
-        self._POS_WINDOW = 0.03, 0.08
+        self._SKY_WINDOW = 0.03, 0.08
+        self._NEG_WINDOW = 0.03, 0.08
 
         self._ANN_LAYERS = [self._BOW_CLUSTERS, 64, NUM_CLASSES] # input are bow descriptors, output are classes
 
@@ -58,11 +59,11 @@ class CloudClassify(object):
     def train(self):
         self.initialize_classifiers()
 
-    def set_parameters(self, epochs, conf_thresh, pos_window, nms_thresh):
+    def set_parameters(self, epochs, conf_thresh, sky_window, neg_window, nms_thresh):
         self._EPOCHS = epochs
         self._ANN_CONF_THRESHOLD = conf_thresh
-        self._POS_WINDOW = pos_window
-
+        self._SKY_WINDOW = sky_window
+        self._NEG_WINDOW = neg_window
         self._NMS_OVERLAP_THRESHOLD = nms_thresh
 
     def set_architecture(self, clusters, inner_layers):
@@ -168,10 +169,13 @@ class CloudClassify(object):
                     class_id = int(prediction[0])
                     confidence = prediction[1][0][class_id]
                     #print("class: ", CLASSES[class_id], " ", str(confidence))
-                    sky_conf = abs(prediction[1][0][0])
+                    sky_conf = prediction[1][0][1]
+                    neg_conf = prediction[1][0][0]
                     if ( confidence > self._ANN_CONF_THRESHOLD
-                         and sky_conf < self._POS_WINDOW[1]
-                         and sky_conf > self._POS_WINDOW[0] ): #or class_id == 5:
+                         and sky_conf < self._SKY_WINDOW[1]
+                         and sky_conf > self._SKY_WINDOW[0]
+                         and neg_conf < self._NEG_WINDOW[1]
+                         and neg_conf > self._NEG_WINDOW[0] ): #or class_id == 5:
                         h, w = roi.shape
                         scale = gray_img.shape[0] / \
                             float(resized.shape[0])
@@ -182,14 +186,16 @@ class CloudClassify(object):
                              int((y+h) * scale),
                              confidence,
                              sky_conf,
+                             neg_conf,
                              class_id])
             pos_rects = nms(np.array(pos_rects), self._NMS_OVERLAP_THRESHOLD)
             #print("positives: ", pos_rects)
-            for x0, y0, x1, y1, score, sky_conf, class_id in pos_rects:
+            for x0, y0, x1, y1, score, sky_conf, neg_conf, class_id in pos_rects:
                 cv.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)),
                               (100, 255, 100), 4)
                 text = CLASSES[int(class_id)] + ' ' \
-                    + ('%.2f' % score) + ' ' + ('%.2f' % sky_conf)
+                    + ('%.2f' % score) + ' ' + ('%.2f' % sky_conf) \
+                    + ' ' + ('%.2f' % neg_conf)
                 cv.putText(img, text, (int(x0), int(y0) + 20),
                             cv.FONT_HERSHEY_SIMPLEX, 1, (100, 255, 100), 4)
             return img
@@ -208,7 +214,7 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.1, min_size=(500, 500),
+    def pyramid(self, img, scale_factor=1.2, min_size=(500, 500),
                 max_size=(2500, 2500)):
         h, w = img.shape
         min_w, min_h = min_size
