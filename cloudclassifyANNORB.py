@@ -4,8 +4,8 @@ import os
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
-CLASSES = ['Sky','Cumulus','Cirrus'] #
-NUM_CLASSES = 3
+CLASSES = ['NEG','Sky','Cumulus','Altocumulus','Cumulostratus','Cirrus']
+NUM_CLASSES = 6
 TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
 
 MAX_HEIGHT = 1100
@@ -21,7 +21,8 @@ class CloudClassify(object):
         self._inputImage = None
         self._resizedInput = None
         self._classifier = None
-        self._sift = None
+        
+        self._orb = None
         self._flann = None
 
         self._BOW_CLUSTERS = NUM_CLASSES * 4
@@ -85,15 +86,15 @@ class CloudClassify(object):
             print('data not found')
             exit(1)
         else:
-            self._sift = cv.xfeatures2d.SIFT_create()
+            self._orb = cv.ORB_create()
             
-            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=7)
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=8)
             search_params = {}
             
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
 
             self._bow_kmeans_trainer = cv.BOWKMeansTrainer(self._BOW_CLUSTERS)
-            self._bow_extractor = cv.BOWImgDescriptorExtractor(self._sift, self._flann)
+            self._bow_extractor = cv.BOWImgDescriptorExtractor(self._orb, self._flann)
 
             for class_name in CLASSES:
                 for i in range(BOW_NUM_TRAINING_SAMPLES_PER_CLASS):
@@ -142,16 +143,17 @@ class CloudClassify(object):
                 
 
     def extract_bow_descriptors(self, img):
-        features = self._sift.detect(img)
+        features = self._orb.detect(img)
         return self._bow_extractor.compute(img, features)
 
     def add_sample(self, path):
-        #print("path: ", path)
+        print("path: ", path)
         current = cv.imread(path, cv.IMREAD_GRAYSCALE)
         current.astype('uint8')
-        keypoints, descriptors = self._sift.detectAndCompute(current, None)
+        keypoints, descriptors = self._orb.detectAndCompute(current, None)
         if descriptors is not None:
-            #print(descriptors)
+            descriptors.astype('float')
+            print(descriptors)
             self._bow_kmeans_trainer.add(descriptors)
     
     def detect_and_classify(self, img, inputPath):
@@ -160,7 +162,7 @@ class CloudClassify(object):
             print(str(self._ANN_CONF_THRESHOLD))
             gray_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
             pos_rects = []
-            for resized in self.pyramid(gray_img,min_size=(gray_img.shape[1]*0.1, gray_img.shape[0]*0.1) ):
+            for resized in self.pyramid(gray_img,min_size=(gray_img.shape[1]*0.5, gray_img.shape[0]*0.5) ):
                 print("resized: ", resized.shape)
                 for x, y, roi in self.sliding_window(resized):
                     descriptors = self.extract_bow_descriptors(roi)
@@ -171,7 +173,7 @@ class CloudClassify(object):
                     class_id = int(prediction[0])
                     confidence = prediction[1][0][class_id]
                     #print("class: ", CLASSES[class_id], " ", str(confidence))
-                    sky_conf = abs(prediction[1][0][0])
+                    sky_conf = abs(prediction[1][0][1])
                     NEG_conf = abs(prediction[1][0][0])
                     if ( confidence > self._ANN_CONF_THRESHOLD
                          and sky_conf < self._SKY_THRESH
@@ -204,7 +206,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=50, window_size=(300, 200)):
+    def sliding_window(self, img, step=90, window_size=(300, 200)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -214,7 +216,7 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.6, min_size=(500, 500),
+    def pyramid(self, img, scale_factor=1.2, min_size=(500, 500),
                 max_size=(2500, 2500)):
         h, w = img.shape
         min_w, min_h = min_size
