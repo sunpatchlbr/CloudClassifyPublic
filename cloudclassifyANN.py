@@ -125,7 +125,7 @@ class CloudClassify(object):
                     records.append(record)
 
             for e in range(self._EPOCHS):
-                print("epoch: %d" % e)
+                #print("epoch: %d" % e)
                 for t, c in records:
                     data = cv.ml.TrainData_create(t, cv.ml.ROW_SAMPLE, c)
                     if self._ann.isTrained():
@@ -204,7 +204,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=50, window_size=(150, 100)):
+    def sliding_window(self, img, step=45, window_size=(150, 100)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -214,8 +214,8 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.2, min_size=(500, 500),
-                max_size=(2500, 2500)):
+    def pyramid(self, img, scale_factor=1.15, min_size=(500, 500),
+                max_size=(2600, 2600)):
         h, w = img.shape
         min_w, min_h = min_size
         max_w, max_h = max_size
