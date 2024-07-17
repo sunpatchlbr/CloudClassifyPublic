@@ -9,4 +9,4 @@ for i in range(NUM_TO_GENERATE):
     randomByteArray = bytearray(os.urandom(180000))
     flatNumpyArray = np.array(randomByteArray).astype('uint8')
     grayImage = flatNumpyArray.reshape(200,300,3)
-    cv.imwrite(NEG_DATA_PATH+"NEG"+str(i+21)+"R.JPG",grayImage)
+    cv.imwrite(NEG_DATA_PATH+"NEG"+str(i+31)+"R.JPG",grayImage)

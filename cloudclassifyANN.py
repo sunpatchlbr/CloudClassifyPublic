@@ -4,14 +4,14 @@ import os
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
-CLASSES = ['Sky','Cumulus','Cirrus'] #
-NUM_CLASSES = 3
+CLASSES = ['NEG','Sky','Cumulus','Cirrus'] #
+NUM_CLASSES = len(CLASSES)
 TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
 
 MAX_HEIGHT = 1100
 
-BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 30
-ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 30
+BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 40
+ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 40
 
 FLANN_INDEX_KDTREE = 1
 
@@ -32,8 +32,7 @@ class CloudClassify(object):
         
         self._EPOCHS = 20
         self._ANN_CONF_THRESHOLD = 0.3
-        self._SKY_THRESH = 0.07
-        self._NEG_THRESH = 0.05
+        self._POS_WINDOW = 0.03, 0.08
 
         self._ANN_LAYERS = [self._BOW_CLUSTERS, 64, NUM_CLASSES] # input are bow descriptors, output are classes
 
@@ -59,11 +58,10 @@ class CloudClassify(object):
     def train(self):
         self.initialize_classifiers()
 
-    def set_parameters(self, epochs, conf_thresh, sky_conf, neg_conf, nms_thresh):
+    def set_parameters(self, epochs, conf_thresh, pos_window, nms_thresh):
         self._EPOCHS = epochs
         self._ANN_CONF_THRESHOLD = conf_thresh
-        self._SKY_THRESH = sky_conf
-        self._NEG_THRESH = neg_conf
+        self._POS_WINDOW = pos_window
 
         self._NMS_OVERLAP_THRESHOLD = nms_thresh
 
@@ -146,7 +144,6 @@ class CloudClassify(object):
         return self._bow_extractor.compute(img, features)
 
     def add_sample(self, path):
-        #print("path: ", path)
         current = cv.imread(path, cv.IMREAD_GRAYSCALE)
         current.astype('uint8')
         keypoints, descriptors = self._sift.detectAndCompute(current, None)
@@ -172,10 +169,9 @@ class CloudClassify(object):
                     confidence = prediction[1][0][class_id]
                     #print("class: ", CLASSES[class_id], " ", str(confidence))
                     sky_conf = abs(prediction[1][0][0])
-                    NEG_conf = abs(prediction[1][0][0])
                     if ( confidence > self._ANN_CONF_THRESHOLD
-                         and sky_conf < self._SKY_THRESH
-                         and NEG_conf < self._NEG_THRESH ): #or class_id == 5:
+                         and sky_conf < self._POS_WINDOW[1]
+                         and sky_conf > self._POS_WINDOW[0] ): #or class_id == 5:
                         h, w = roi.shape
                         scale = gray_img.shape[0] / \
                             float(resized.shape[0])
@@ -186,17 +182,15 @@ class CloudClassify(object):
                              int((y+h) * scale),
                              confidence,
                              sky_conf,
-                             NEG_conf,
                              class_id])
             pos_rects = nms(np.array(pos_rects), self._NMS_OVERLAP_THRESHOLD)
             #print("positives: ", pos_rects)
-            for x0, y0, x1, y1, score, sky_conf, NEG_conf, class_id in pos_rects:
+            for x0, y0, x1, y1, score, sky_conf, class_id in pos_rects:
                 cv.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)),
                               (100, 255, 100), 4)
                 text = CLASSES[int(class_id)] + ' ' \
-                    + ('%.2f' % score) + ' ' + ('%.2f' % sky_conf) \
-                    + ' ' + ('%.2f' % NEG_conf)
-                cv.putText(img, text, (int(x0), int(y0) - 20),
+                    + ('%.2f' % score) + ' ' + ('%.2f' % sky_conf)
+                cv.putText(img, text, (int(x0), int(y0) + 20),
                             cv.FONT_HERSHEY_SIMPLEX, 1, (100, 255, 100), 4)
             return img
         else:
@@ -204,7 +198,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=50, window_size=(300, 200)):
+    def sliding_window(self, img, step=50, window_size=(150, 100)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -214,7 +208,7 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.6, min_size=(500, 500),
+    def pyramid(self, img, scale_factor=1.1, min_size=(500, 500),
                 max_size=(2500, 2500)):
         h, w = img.shape
         min_w, min_h = min_size
