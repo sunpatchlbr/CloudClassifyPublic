@@ -5,7 +5,7 @@ from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
 CLASSES = ['NEG','Sky','Cumulus','Altocumulus','Cumulostratus','Cirrus']
-NUM_CLASSES = 3
+NUM_CLASSES = 6
 TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
 
 MAX_HEIGHT = 1100
@@ -31,7 +31,7 @@ class CloudClassify(object):
         self._ann = None
         
         self._EPOCHS = 20
-        self._ANN_CONF_THRESHOLD = 0.7
+        self._ANN_CONF_THRESHOLD = 0.3
         self._SKY_THRESH = 0.07
         self._NEG_THRESH = 0.05
 
@@ -156,6 +156,8 @@ class CloudClassify(object):
     def detect_and_classify(self, img, inputPath):
         if self._READY:
             print("Detecting and classifying clouds in sky...")
+            print(str(self._ANN_CONF_THRESHOLD))
+            exit(0)
             gray_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
             pos_rects = []
             for resized in self.pyramid(gray_img):
@@ -165,14 +167,13 @@ class CloudClassify(object):
                     if descriptors is None:
                         continue
                     prediction = self._ann.predict(descriptors)
+                    #print("prediction: ", prediction)
                     class_id = int(prediction[0])
                     confidence = prediction[1][0][class_id]
+                    print("class: ", CLASSES[class_id], " ", str(confidence))
                     sky_conf = abs(prediction[1][0][1])
                     NEG_conf = abs(prediction[1][0][0])
-                    if ( confidence > self._ANN_CONF_THRESHOLD \
-                       and sky_conf < self._SKY_THRESH \
-                       and NEG_conf < self._NEG_THRESH ) or \
-                       class_id == 5:
+                    if confidence > self._ANN_CONF_THRESHOLD :# and sky_conf < self._SKY_THRESH and NEG_conf < self._NEG_THRESH : #or class_id == 5:
                         h, w = roi.shape
                         scale = gray_img.shape[0] / \
                             float(resized.shape[0])
@@ -211,7 +212,7 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.8, min_size=(500, 500),
+    def pyramid(self, img, scale_factor=2, min_size=(500, 500),
                 max_size=(2500, 2500)):
         h, w = img.shape
         min_w, min_h = min_size
