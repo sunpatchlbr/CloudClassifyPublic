@@ -4,20 +4,20 @@ import os
 import sys
 import cloudclassifyANN as cc
 
-CLUSTERS = 15
-HIDDEN_LAYERS = [81]
+CLUSTERS = 18
+HIDDEN_LAYERS = [75]
 
-EPOCHS = 20
+EPOCHS = 12
 
-CONF_THRESH = 0.05
-SKY_THRESH = 1
-NEG_THRESH = 1
+CONF_THRESH = 0.3
+SKY_THRESH = 0.2
+NEG_THRESH = 0.05
 
-NMS_THRESH = 0.7
+NMS_THRESH = 0.25
 
 TEST_LOCATION = '../../Data/TestPhotos/BackgroundTest/'
 OUTPUT_LOCATION = '../../Data/Outputs/'
-TEST_FILES = ['multi1.JPG'] #, 'multi2.JPG','multi3.JPG']
+TEST_FILES = ['multi1.JPG', 'multi2.JPG','multi3.JPG']
 
 cloud = cc.CloudClassify()
 cloud.set_parameters(

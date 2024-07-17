@@ -60,12 +60,12 @@ class CloudClassify(object):
         self.initialize_classifiers()
 
     def set_parameters(self, epochs, conf_thresh, sky_conf, neg_conf, nms_thresh):
-        self._EPOCHS = 20
-        self._ANN_CONF_THRESHOLD = 0.7
-        self._SKY_THRESH = 0.07
-        self._NEG_THRESH = 0.05
+        self._EPOCHS = epochs
+        self._ANN_CONF_THRESHOLD = conf_thresh
+        self._SKY_THRESH = sky_conf
+        self._NEG_THRESH = neg_conf
 
-        self._NMS_OVERLAP_THRESHOLD = 0.3
+        self._NMS_OVERLAP_THRESHOLD = nms_thresh
 
     def set_architecture(self, clusters, inner_layers):
         self._BOW_CLUSTERS = clusters
@@ -157,10 +157,9 @@ class CloudClassify(object):
         if self._READY:
             print("Detecting and classifying clouds in sky...")
             print(str(self._ANN_CONF_THRESHOLD))
-            exit(0)
             gray_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
             pos_rects = []
-            for resized in self.pyramid(gray_img):
+            for resized in self.pyramid(gray_img,min_size=(gray_img.shape[1]*0.5, gray_img.shape[0]*0.5) ):
                 print("resized: ", resized.shape)
                 for x, y, roi in self.sliding_window(resized):
                     descriptors = self.extract_bow_descriptors(roi)
@@ -170,10 +169,12 @@ class CloudClassify(object):
                     #print("prediction: ", prediction)
                     class_id = int(prediction[0])
                     confidence = prediction[1][0][class_id]
-                    print("class: ", CLASSES[class_id], " ", str(confidence))
+                    #print("class: ", CLASSES[class_id], " ", str(confidence))
                     sky_conf = abs(prediction[1][0][1])
                     NEG_conf = abs(prediction[1][0][0])
-                    if confidence > self._ANN_CONF_THRESHOLD :# and sky_conf < self._SKY_THRESH and NEG_conf < self._NEG_THRESH : #or class_id == 5:
+                    if ( confidence > self._ANN_CONF_THRESHOLD
+                         and sky_conf < self._SKY_THRESH
+                         and NEG_conf < self._NEG_THRESH ): #or class_id == 5:
                         h, w = roi.shape
                         scale = gray_img.shape[0] / \
                             float(resized.shape[0])
@@ -202,7 +203,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=50, window_size=(150, 100)):
+    def sliding_window(self, img, step=90, window_size=(300, 200)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -212,7 +213,7 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=2, min_size=(500, 500),
+    def pyramid(self, img, scale_factor=1.2, min_size=(500, 500),
                 max_size=(2500, 2500)):
         h, w = img.shape
         min_w, min_h = min_size
