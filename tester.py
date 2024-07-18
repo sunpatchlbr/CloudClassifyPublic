@@ -4,15 +4,15 @@ import os
 import sys
 import cloudclassifyANN as cc
 
-CLUSTERS = 16
-HIDDEN_LAYERS = [96]
+CLUSTERS = 13
+HIDDEN_LAYERS = [69]
 
-EPOCHS = 20
-CONF_THRESH = 0.59
-SKY_WINDOW = -0.05, 0.05
-NEG_WINDOW = -0.05, 0.05
+EPOCHS = 30
+CONF_THRESH = 0.71
+SKY_WINDOW = -0.04, 0.07
+NEG_WINDOW = -0.06, 0.08
 
-NMS_THRESH = 0.15
+NMS_THRESH = 0.2
 
 TEST_LOCATION = '../../Data/TestPhotos/BackgroundTest/multi/'
 OUTPUT_LOCATION = '../../Data/Outputs/'
