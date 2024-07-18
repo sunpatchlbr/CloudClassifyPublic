@@ -2,17 +2,17 @@ import cv2 as cv
 import numpy as np
 import os
 import sys
-import cloudclassifyANN as cc
+import cloudclassifyANNORB as cc
 
 CLUSTERS = 13
-HIDDEN_LAYERS = [69]
+HIDDEN_LAYERS = [70]
 
-EPOCHS = 30
+EPOCHS = 100
 CONF_THRESH = 0.71
-SKY_WINDOW = -0.04, 0.07
-NEG_WINDOW = -0.06, 0.08
+SKY_WINDOW = -0.08, 0.07
+NEG_WINDOW = -0.05, 0.08
 
-NMS_THRESH = 0.2
+NMS_THRESH = 0.1
 
 TEST_LOCATION = '../../Data/TestPhotos/BackgroundTest/multi/'
 OUTPUT_LOCATION = '../../Data/Outputs/'

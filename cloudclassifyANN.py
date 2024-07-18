@@ -214,7 +214,7 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.6, min_size=(500, 500),
+    def pyramid(self, img, scale_factor=1.4, min_size=(500, 500),
                 max_size=(2600, 2600)):
         h, w = img.shape
         min_w, min_h = min_size
