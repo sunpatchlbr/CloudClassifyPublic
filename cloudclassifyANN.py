@@ -8,8 +8,6 @@ CLASSES = ['NEG','Sky','Cumulus','Cirrus'] #
 NUM_CLASSES = len(CLASSES)
 TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
 
-MAX_HEIGHT = 1100
-
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 40
 ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 40
 
@@ -19,7 +17,6 @@ class CloudClassify(object):
     def __init__(self):
         print("hello")
         self._inputImage = None
-        self._resizedInput = None
         self._classifier = None
         self._sift = None
         self._flann = None
@@ -43,13 +40,14 @@ class CloudClassify(object):
         self._output = None
         self._READY = False
         
-    def run(self, inputFilePath=TEST_PATH, resize_it=False):
+    def run(self, inputFilePath=TEST_PATH, remove_foreground=0.0):
         if not os.path.exists(inputFilePath):
             print("Couldn't find input image file")
         else:
-            self._resize_it = resize_it
-            self._inputImage = cv.imread(inputFilePath)
-            self._inputImage = self.resizeInput(self._inputImage, MAX_HEIGHT, resize_it)
+            if remove_foreground > 0.1:
+                self._inputImage = self.isolate_sky(inputFilePath, fg_proportion=remove_foreground)
+            else:
+                self._inputImage = cv.imread(inputFilePath)
             return self.detect_and_classify(self._inputImage, inputFilePath)
 
     def get_path_data(self, data_class, i):
@@ -149,17 +147,18 @@ class CloudClassify(object):
         current.astype('uint8')
         keypoints, descriptors = self._sift.detectAndCompute(current, None)
         if descriptors is not None:
-            #print(descriptors)
             self._bow_kmeans_trainer.add(descriptors)
     
     def detect_and_classify(self, img, inputPath):
         if self._READY:
             print("Detecting and classifying clouds in sky...")
-            print(str(self._ANN_CONF_THRESHOLD))
             gray_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+            original_img = cv.imread(inputPath)
             pos_rects = []
-            for resized in self.pyramid(gray_img,min_size=(gray_img.shape[1]*0.1, gray_img.shape[0]*0.1) ):
-                print("resized: ", resized.shape)
+            for resized in self.pyramid(gray_img):
+                scale = original_img.shape[0] / float(resized.shape[0])
+                print("scale: ", resized.shape)
+                
                 for x, y, roi in self.sliding_window(resized):
                     descriptors = self.extract_bow_descriptors(roi)
                     if descriptors is None:
@@ -177,8 +176,6 @@ class CloudClassify(object):
                          and neg_conf < self._NEG_WINDOW[1]
                          and neg_conf > self._NEG_WINDOW[0] ): #or class_id == 5:
                         h, w = roi.shape
-                        scale = gray_img.shape[0] / \
-                            float(resized.shape[0])
                         pos_rects.append(
                             [int(x * scale),
                              int(y * scale),
@@ -191,20 +188,20 @@ class CloudClassify(object):
             pos_rects = nms(np.array(pos_rects), self._NMS_OVERLAP_THRESHOLD)
             #print("positives: ", pos_rects)
             for x0, y0, x1, y1, score, sky_conf, neg_conf, class_id in pos_rects:
-                cv.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)),
+                cv.rectangle(original_img, (int(x0), int(y0)), (int(x1), int(y1)),
                               (100, 255, 100), 4)
                 text = CLASSES[int(class_id)] + ' ' \
                     + ('%.2f' % score) + ' ' + ('%.2f' % sky_conf) \
                     + ' ' + ('%.2f' % neg_conf)
-                cv.putText(img, text, (int(x0), int(y0) + 20),
+                cv.putText(original_img, text, (int(x0), int(y0) + 20),
                             cv.FONT_HERSHEY_SIMPLEX, 1, (100, 255, 100), 4)
-            return img
+            return original_img
         else:
             print("not trained")
             exit(1)
         
 
-    def sliding_window(self, img, step=20, window_size=(150, 100)):
+    def sliding_window(self, img, step=35, window_size=(150, 100)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -214,8 +211,8 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.4, min_size=(500, 500),
-                max_size=(2600, 2600)):
+    def pyramid(self, img, scale_factor=1.2, min_size=(550, 550),
+                max_size=(1500, 1500)):
         h, w = img.shape
         min_w, min_h = min_size
         max_w, max_h = max_size
@@ -226,18 +223,11 @@ class CloudClassify(object):
             h /= scale_factor
             img = cv.resize(img, (int(w), int(h)),
                              interpolation=cv.INTER_AREA)
-    def resizeInput(self, img, limit, toggle):
-        if toggle and (img.shape[0] > limit):
-            factor = float(limit) / float(img.shape[0])
-            factor = factor * factor
-            img = cv.resize(img, (0, 0), fx = factor, fy = factor)
-        return img
 
-    def isolate_sky(self, originalImg, fg_proportion=0.4):
+    def isolate_sky(self, inputPath, fg_proportion=0.4):
         print("Isolating sky from foreground...")
 
-        cv.namedWindow("og", cv.WINDOW_NORMAL)
-        cv.imshow("og", originalImg)
+        originalImg = cv.imread(inputPath)
 
         mask = np.zeros(originalImg.shape[:2], np.uint8)
 
@@ -255,10 +245,11 @@ class CloudClassify(object):
 
         rect = (0,height-fg_height, width, fg_height)
         
-        cv.grabCut(originalImg, mask, rect, bgdModel, fgdModel, 15, cv.GC_INIT_WITH_RECT)
+        cv.grabCut(originalImg, mask, rect, bgdModel, fgdModel, 5, cv.GC_INIT_WITH_RECT)
 
         obviousSkyMask = np.where((mask==2)|(mask==0), 1, 0).astype('uint8')
 
         obviousSky = originalImg*obviousSkyMask[:,:,np.newaxis]
 
+        cv.imwrite(inputPath+"sky", obviousSky)
         return obviousSky

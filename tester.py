@@ -2,21 +2,21 @@ import cv2 as cv
 import numpy as np
 import os
 import sys
-import cloudclassifyANNORB as cc
+import cloudclassifyANN as cc
 
 CLUSTERS = 13
 HIDDEN_LAYERS = [70]
 
 EPOCHS = 100
-CONF_THRESH = 0.71
-SKY_WINDOW = -0.08, 0.07
-NEG_WINDOW = -0.05, 0.08
+CONF_THRESH = 0.75
+SKY_WINDOW = -0.1,0.1#-0.08, 0.07
+NEG_WINDOW = -0.1,0.1#-0.05, 0.08
 
 NMS_THRESH = 0.1
 
 TEST_LOCATION = '../../Data/TestPhotos/BackgroundTest/multi/'
 OUTPUT_LOCATION = '../../Data/Outputs/'
-TEST_FILES = ['multi2.JPG','multi3.JPG']#,'multi4.JPG']
+TEST_FILES = ['multi2.JPG','multi3.JPG','multi4.JPG']
 
 cloud = cc.CloudClassify()
 cloud.set_parameters(
@@ -30,5 +30,5 @@ cloud.train()
 
 for test in TEST_FILES:
     test_path = TEST_LOCATION + test
-    output = cloud.run(test_path,resize_it=False)
+    output = cloud.run(test_path,remove_foreground=0.0)
     cv.imwrite(OUTPUT_LOCATION+test, output)
