@@ -8,9 +8,9 @@ CLUSTERS = 13
 HIDDEN_LAYERS = [70]
 
 EPOCHS = 100
-CONF_THRESH = 0.75
-SKY_WINDOW = -0.1,0.1#-0.08, 0.07
-NEG_WINDOW = -0.1,0.1#-0.05, 0.08
+CONF_THRESH = 0.79
+SKY_WINDOW = -0.11, 0.1
+NEG_WINDOW = -0.11, 0.1
 
 NMS_THRESH = 0.1
 
@@ -30,5 +30,5 @@ cloud.train()
 
 for test in TEST_FILES:
     test_path = TEST_LOCATION + test
-    output = cloud.run(test_path,remove_foreground=0.0)
+    output = cloud.run(test_path)
     cv.imwrite(OUTPUT_LOCATION+test, output)

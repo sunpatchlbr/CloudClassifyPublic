@@ -40,14 +40,11 @@ class CloudClassify(object):
         self._output = None
         self._READY = False
         
-    def run(self, inputFilePath=TEST_PATH, remove_foreground=0.0):
+    def run(self, inputFilePath=TEST_PATH):
         if not os.path.exists(inputFilePath):
             print("Couldn't find input image file")
         else:
-            if remove_foreground > 0.1:
-                self._inputImage = self.isolate_sky(inputFilePath, fg_proportion=remove_foreground)
-            else:
-                self._inputImage = cv.imread(inputFilePath)
+            self._inputImage = cv.imread(inputFilePath)
             return self.detect_and_classify(self._inputImage, inputFilePath)
 
     def get_path_data(self, data_class, i):
@@ -201,7 +198,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=35, window_size=(150, 100)):
+    def sliding_window(self, img, step=15, window_size=(90, 60)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -211,8 +208,8 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.2, min_size=(550, 550),
-                max_size=(1500, 1500)):
+    def pyramid(self, img, scale_factor=1.25, min_size=(400, 400),
+                max_size=(1000, 1000)):
         h, w = img.shape
         min_w, min_h = min_size
         max_w, max_h = max_size
@@ -223,33 +220,3 @@ class CloudClassify(object):
             h /= scale_factor
             img = cv.resize(img, (int(w), int(h)),
                              interpolation=cv.INTER_AREA)
-
-    def isolate_sky(self, inputPath, fg_proportion=0.4):
-        print("Isolating sky from foreground...")
-
-        originalImg = cv.imread(inputPath)
-
-        mask = np.zeros(originalImg.shape[:2], np.uint8)
-
-        height = originalImg.shape[0]
-
-        fg_height = int(float(height) * fg_proportion)
-        
-        width = originalImg.shape[1]
-
-        print("Height: ", height)
-        print("Width: ", width)
-
-        bgdModel = np.zeros((1, 65), np.float64)
-        fgdModel = np.zeros((1, 65), np.float64)
-
-        rect = (0,height-fg_height, width, fg_height)
-        
-        cv.grabCut(originalImg, mask, rect, bgdModel, fgdModel, 5, cv.GC_INIT_WITH_RECT)
-
-        obviousSkyMask = np.where((mask==2)|(mask==0), 1, 0).astype('uint8')
-
-        obviousSky = originalImg*obviousSkyMask[:,:,np.newaxis]
-
-        cv.imwrite(inputPath+"sky", obviousSky)
-        return obviousSky
