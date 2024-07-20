@@ -4,9 +4,11 @@ import os
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
-CLASSES = ['NEG','Sky','Cumulus','Cirrus'] #
+CLASSES = ['NEG','Sky','Cumulus','Cirrus']
 NUM_CLASSES = len(CLASSES)
-TEST_PATH = '../../Data/TestPhotos/BackgroundTest/TEST.jpg'
+
+ANN_PATH = 'ann_data.xml'
+CLUSTER_PATH = 'cluster_data.xml'
 
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 40
 ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 40
@@ -40,7 +42,7 @@ class CloudClassify(object):
         self._output = None
         self._READY = False
         
-    def run(self, inputFilePath=TEST_PATH):
+    def run(self, inputFilePath=""):
         if not os.path.exists(inputFilePath):
             print("Couldn't find input image file")
         else:
@@ -51,7 +53,7 @@ class CloudClassify(object):
         path = DATA_PATH + data_class + "/" + data_class + str(i) + "R.JPG"
         return path
                 
-    def train(self):
+    def prepare(self):
         self.initialize_classifiers()
 
     def set_parameters(self, epochs, conf_thresh, sky_window, neg_window, nms_thresh):
@@ -80,60 +82,67 @@ class CloudClassify(object):
             exit(1)
         else:
             self._sift = cv.xfeatures2d.SIFT_create()
-            
-            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=7)
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=6)
             search_params = {}
-            
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
-
             self._bow_kmeans_trainer = cv.BOWKMeansTrainer(self._BOW_CLUSTERS)
             self._bow_extractor = cv.BOWImgDescriptorExtractor(self._sift, self._flann)
-
             for class_name in CLASSES:
                 for i in range(BOW_NUM_TRAINING_SAMPLES_PER_CLASS):
                     path = self.get_path_data(class_name, i+1)
                     self.add_sample(path)
 
             voc = self._bow_kmeans_trainer.cluster()
+            print("VOCABULARY: ", voc)
+            exit(0)
             self._bow_extractor.setVocabulary(voc)
 
             self._ann = cv.ml.ANN_MLP_create()
-            self._ann.setLayerSizes(np.array(self._ANN_LAYERS))
-            self._ann.setActivationFunction(cv.ml.ANN_MLP_SIGMOID_SYM, 0.6, 1.0)
-            self._ann.setTrainMethod(cv.ml.ANN_MLP_BACKPROP, 0.1, 0.1)
-            self._ann.setTermCriteria(
-                (cv.TERM_CRITERIA_MAX_ITER | cv.TERM_CRITERIA_EPS, 100, 1.0))
 
-            records = []
+            if not os.path.exists(TRAINED_PATH):
+                self.train()
+            else:
+                print('Loading existing training information...')
+                self._ann.load(ANN_PATH)
 
-            for c in range(NUM_CLASSES):
-                class_name = CLASSES[c]
-                for i in range(ANN_NUM_TRAINING_SAMPLES_PER_CLASS):
-                    current = cv.imread(self.get_path_data(class_name, i))
-                    descriptors = self.extract_bow_descriptors(current)
-                    if descriptors is None:
-                        continue
-                    sample = descriptors[0]
-                    identity = np.zeros(NUM_CLASSES)
-                    identity[c] = 1.0
-                    record = self.record(sample, identity)
-                    records.append(record)
-
-            for e in range(self._EPOCHS):
-                #print("epoch: %d" % e)
-                for t, c in records:
-                    data = cv.ml.TrainData_create(t, cv.ml.ROW_SAMPLE, c)
-                    if self._ann.isTrained():
-                        self._ann.train(
-                            data,
-                            cv.ml.ANN_MLP_UPDATE_WEIGHTS | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
-                    else:
-                        self._ann.train(
-                            data,
-                            cv.ml.ANN_MLP_NO_INPUT_SCALE | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
             self._READY = True
             print("ANN READY")
-                
+
+    def train(self):
+        print('Training...')
+        self._ann.setLayerSizes(np.array(self._ANN_LAYERS))
+        self._ann.setActivationFunction(cv.ml.ANN_MLP_SIGMOID_SYM, 0.6, 1.0)
+        self._ann.setTrainMethod(cv.ml.ANN_MLP_BACKPROP, 0.1, 0.1)
+        self._ann.setTermCriteria(
+            (cv.TERM_CRITERIA_MAX_ITER | cv.TERM_CRITERIA_EPS, 100, 1.0))
+
+        records = []
+
+        for c in range(NUM_CLASSES):
+            class_name = CLASSES[c]
+            for i in range(ANN_NUM_TRAINING_SAMPLES_PER_CLASS):
+                current = cv.imread(self.get_path_data(class_name, i))
+                descriptors = self.extract_bow_descriptors(current)
+                if descriptors is None:
+                    continue
+                sample = descriptors[0]
+                identity = np.zeros(NUM_CLASSES)
+                identity[c] = 1.0
+                record = self.record(sample, identity)
+                records.append(record)
+        
+        for e in range(self._EPOCHS):
+            for t, c in records:
+                data = cv.ml.TrainData_create(t, cv.ml.ROW_SAMPLE, c)
+                if self._ann.isTrained():
+                    self._ann.train(
+                        data,
+                        cv.ml.ANN_MLP_UPDATE_WEIGHTS | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
+                else:
+                    self._ann.train(
+                        data,
+                        cv.ml.ANN_MLP_NO_INPUT_SCALE | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
+        self._ann.save(ANN_PATH)
 
     def extract_bow_descriptors(self, img):
         features = self._sift.detect(img)
@@ -155,23 +164,20 @@ class CloudClassify(object):
             for resized in self.pyramid(gray_img):
                 scale = original_img.shape[0] / float(resized.shape[0])
                 print("scale: ", resized.shape)
-                
                 for x, y, roi in self.sliding_window(resized):
                     descriptors = self.extract_bow_descriptors(roi)
                     if descriptors is None:
                         continue
                     prediction = self._ann.predict(descriptors)
-                    #print("prediction: ", prediction)
                     class_id = int(prediction[0])
                     confidence = prediction[1][0][class_id]
-                    #print("class: ", CLASSES[class_id], " ", str(confidence))
                     sky_conf = prediction[1][0][1]
                     neg_conf = prediction[1][0][0]
                     if ( confidence > self._ANN_CONF_THRESHOLD
                          and sky_conf < self._SKY_WINDOW[1]
                          and sky_conf > self._SKY_WINDOW[0]
                          and neg_conf < self._NEG_WINDOW[1]
-                         and neg_conf > self._NEG_WINDOW[0] ): #or class_id == 5:
+                         and neg_conf > self._NEG_WINDOW[0] ):
                         h, w = roi.shape
                         pos_rects.append(
                             [int(x * scale),
@@ -183,7 +189,6 @@ class CloudClassify(object):
                              neg_conf,
                              class_id])
             pos_rects = nms(np.array(pos_rects), self._NMS_OVERLAP_THRESHOLD)
-            #print("positives: ", pos_rects)
             for x0, y0, x1, y1, score, sky_conf, neg_conf, class_id in pos_rects:
                 cv.rectangle(original_img, (int(x0), int(y0)), (int(x1), int(y1)),
                               (100, 255, 100), 4)
@@ -198,7 +203,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=15, window_size=(90, 60)):
+    def sliding_window(self, img, step=18, window_size=(81, 54)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -209,7 +214,7 @@ class CloudClassify(object):
                     yield (x, y, roi)
 
     def pyramid(self, img, scale_factor=1.25, min_size=(400, 400),
-                max_size=(1000, 1000)):
+                max_size=(1100, 1100)):
         h, w = img.shape
         min_w, min_h = min_size
         max_w, max_h = max_size
