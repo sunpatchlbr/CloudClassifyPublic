@@ -7,7 +7,8 @@ DATA_PATH = '../../Data/TestPhotos/'
 CLASSES = ['NEG','Sky','Cumulus','Cirrus']
 NUM_CLASSES = len(CLASSES)
 
-RECORDS_PATH = 'records.npy'
+TRAINING_SAMPLES = 'samples.npy'
+TRAINING_LABELS = 'labels.npy'
 VOCAB_PATH = 'cluster_vocab.npy'
 
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 42
@@ -74,10 +75,6 @@ class CloudClassify(object):
         self._ANN_LAYERS = layers
         
 
-    def record(self, sample, classification):
-        return (np.array([sample], np.float32),
-                np.array([classification], np.float32))
-
     def initialize_classifiers(self):
         if not os.path.isdir(DATA_PATH):
             print('data not found')
@@ -140,11 +137,13 @@ class CloudClassify(object):
         self._ann.setTermCriteria(
             (cv.TERM_CRITERIA_MAX_ITER | cv.TERM_CRITERIA_EPS, 100, 1.0))
 
-        records = []
+        samples = []
+        labels = []
 
-        if os.path.exists(RECORDS_PATH):
+        if os.path.exists(TRAINING_SAMPLES) and os.path.exists(TRAINING_LABELS):
             print("Loading existing records")
-            records = np.load(RECORDS_PATH)
+            samples = np.load(TRAINING_SAMPLES)
+            labels = np.load(TRAINING_LABELS)
         else:
             print("Retaking descriptors for records...")
             for class_id in range(NUM_CLASSES):
@@ -154,15 +153,17 @@ class CloudClassify(object):
                     descriptors = self.extract_bow_descriptors(current)
                     if descriptors is None:
                         continue
-                    sample = descriptors[0]
-                    record = self.record(sample, class_id)
-                    records.append(record)
-            np.save(RECORDS_PATH,records)
+                    sample = np.array(descriptors[0],np.float32)
+                    samples.append(sample)
+                    labels.append(class_id)
+                    
+            np.save(TRAINING_SAMPLES,samples)
+            np.save(TRAINING_LABELS,labels)
             print("Records saved...")
 
         for e in range(self._EPOCHS):
             print("epoch: ", str(e+1))
-            for sample, class_id in records:
+            for sample, class_id in (samples, labels):
                 identity = np.zeros(NUM_CLASSES)
                 identity[class_id] = 1.0
                 identity.astype(np.float32)
