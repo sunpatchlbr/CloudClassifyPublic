@@ -7,11 +7,11 @@ DATA_PATH = '../../Data/TestPhotos/'
 CLASSES = ['NEG','Sky','Cumulus','Cirrus']
 NUM_CLASSES = len(CLASSES)
 
-ANN_PATH = 'ann_data.yaml'
+RECORDS_PATH = 'records.npy'
 VOCAB_PATH = 'cluster_vocab.npy'
 
-BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 40
-ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 40
+BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 42
+ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 42
 
 FLANN_INDEX_KDTREE = 1
 
@@ -84,25 +84,21 @@ class CloudClassify(object):
             exit(1)
         else:
             self._sift = cv.xfeatures2d.SIFT_create()
-            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=6)
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=14)
             search_params = {}
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
             self._bow_extractor = cv.BOWImgDescriptorExtractor(self._sift, self._flann)
 
             self._ann = cv.ml.ANN_MLP_create()
 
-            if os.path.exists(ANN_PATH) and os.path.exists(VOCAB_PATH):
-                print('Loading existing training information...')
+            if os.path.exists(VOCAB_PATH):
+                print('Loading vocab...')
                 self.load_vocab(VOCAB_PATH)
-                self._ann.load(ANN_PATH)
-                print("layers: ", self._ann.getLayerSizes())
-                print("trained: ", self._ann.isTrained())
-                exit(0)
             else:
-                print('Retraining...')
+                print('Reclustering...')
                 self.prepare_vocab()
-                self.train()
                 
+            self.train()   
             self._READY = True
             print("CLASSIFIER READY")
             
@@ -115,6 +111,7 @@ class CloudClassify(object):
         return self._bow_extractor.compute(img, features)
 
     def add_sample(self, path):
+        #print("PATH: ", path)
         current = cv.imread(path, cv.IMREAD_GRAYSCALE)
         current.astype('uint8')
         keypoints, descriptors = self._sift.detectAndCompute(current, None)
@@ -138,28 +135,37 @@ class CloudClassify(object):
     def train(self):
         print('Training ANN on vocab...')
         self._ann.setLayerSizes(np.array(self._ANN_LAYERS))
-        self._ann.setActivationFunction(cv.ml.ANN_MLP_SIGMOID_SYM, 0.6, 1.0)
+        self._ann.setActivationFunction(cv.ml.ANN_MLP_SIGMOID_SYM, 0.5, 1.0)
         self._ann.setTrainMethod(cv.ml.ANN_MLP_BACKPROP, 0.1, 0.1)
         self._ann.setTermCriteria(
             (cv.TERM_CRITERIA_MAX_ITER | cv.TERM_CRITERIA_EPS, 100, 1.0))
 
         records = []
 
-        for c in range(NUM_CLASSES):
-            class_name = CLASSES[c]
-            for i in range(ANN_NUM_TRAINING_SAMPLES_PER_CLASS):
-                current = cv.imread(self.get_path_data(class_name, i))
-                descriptors = self.extract_bow_descriptors(current)
-                if descriptors is None:
-                    continue
-                sample = descriptors[0]
-                identity = np.zeros(NUM_CLASSES)
-                identity[c] = 1.0
-                record = self.record(sample, identity)
-                records.append(record)
-        
+        if os.path.exists(RECORDS_PATH):
+            print("Loading existing records")
+            records = np.load(RECORDS_PATH)
+        else:
+            print("Retaking descriptors for records...")
+            for class_id in range(NUM_CLASSES):
+                class_name = CLASSES[class_id]
+                for i in range(ANN_NUM_TRAINING_SAMPLES_PER_CLASS):
+                    current = cv.imread(self.get_path_data(class_name, i))
+                    descriptors = self.extract_bow_descriptors(current)
+                    if descriptors is None:
+                        continue
+                    sample = descriptors[0]
+                    record = self.record(sample, class_id)
+                    records.append(record)
+            np.save(RECORDS_PATH,records)
+            print("Records saved...")
+
         for e in range(self._EPOCHS):
-            for t, c in records:
+            print("epoch: ", str(e+1))
+            for sample, class_id in records:
+                identity = np.zeros(NUM_CLASSES)
+                identity[class_id] = 1.0
+                identity.astype(np.float32)
                 data = cv.ml.TrainData_create(t, cv.ml.ROW_SAMPLE, c)
                 if self._ann.isTrained():
                     self._ann.train(
@@ -170,8 +176,7 @@ class CloudClassify(object):
                         data,
                         cv.ml.ANN_MLP_NO_INPUT_SCALE | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
 
-        print("Saving ANN for later...")
-        self._ann.save(ANN_PATH)
+        print("ANN ready")
     
     def detect_and_classify(self, img, inputPath):
         if self._READY:

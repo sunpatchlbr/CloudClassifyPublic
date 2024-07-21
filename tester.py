@@ -16,7 +16,7 @@ NMS_THRESH = 0.15
 
 TEST_LOCATION = '../../Data/TestPhotos/BackgroundTest/multi/'
 OUTPUT_LOCATION = '../../Data/Outputs/'
-TEST_FILES = ['multi2.JPG','multi3.JPG','multi4.JPG']
+TEST_FILES = ['multi3.JPG','multi4.JPG']
 
 cloud = cc.CloudClassify()
 cloud.set_parameters(
