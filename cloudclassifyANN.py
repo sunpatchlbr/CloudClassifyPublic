@@ -1,6 +1,7 @@
 import cv2 as cv
 import numpy as np
-import os    
+import os
+import itertools
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
@@ -81,7 +82,7 @@ class CloudClassify(object):
             exit(1)
         else:
             self._sift = cv.xfeatures2d.SIFT_create()
-            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=14)
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=8)
             search_params = {}
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
             self._bow_extractor = cv.BOWImgDescriptorExtractor(self._sift, self._flann)
@@ -132,8 +133,8 @@ class CloudClassify(object):
     def train(self):
         print('Training ANN on vocab...')
         self._ann.setLayerSizes(np.array(self._ANN_LAYERS))
-        self._ann.setActivationFunction(cv.ml.ANN_MLP_SIGMOID_SYM, 0.5, 1.0)
-        self._ann.setTrainMethod(cv.ml.ANN_MLP_BACKPROP, 0.1, 0.1)
+        self._ann.setActivationFunction(cv.ml.ANN_MLP_SIGMOID_SYM, 0.61, 1.0)
+        self._ann.setTrainMethod(cv.ml.ANN_MLP_BACKPROP, 0.05, 0.05)
         self._ann.setTermCriteria(
             (cv.TERM_CRITERIA_MAX_ITER | cv.TERM_CRITERIA_EPS, 100, 1.0))
 
@@ -153,21 +154,25 @@ class CloudClassify(object):
                     descriptors = self.extract_bow_descriptors(current)
                     if descriptors is None:
                         continue
-                    sample = np.array(descriptors[0],np.float32)
+                    sample = descriptors[0]
                     samples.append(sample)
-                    labels.append(class_id)
-                    
+                    labels.append([class_id])
+            samples = np.array(samples,np.float32)
+            labels = np.array(labels,np.float32)
             np.save(TRAINING_SAMPLES,samples)
             np.save(TRAINING_LABELS,labels)
             print("Records saved...")
 
         for e in range(self._EPOCHS):
-            print("epoch: ", str(e+1))
-            for sample, class_id in (samples, labels):
-                identity = np.zeros(NUM_CLASSES)
-                identity[class_id] = 1.0
-                identity.astype(np.float32)
-                data = cv.ml.TrainData_create(t, cv.ml.ROW_SAMPLE, c)
+            #print("epoch: ", str(e+1))
+            for sample, class_id in zip(samples, labels):
+                #print("sample: ", sample)
+                #print("sample shape: ", sample.shape)
+                identity = np.array(np.zeros(NUM_CLASSES),np.float32)
+                identity[int(class_id)] = 1.0
+                #print("identity: " , identity)
+                #print("response shape: ", identity.shape)
+                data = cv.ml.TrainData_create(sample, cv.ml.COL_SAMPLE, identity)
                 if self._ann.isTrained():
                     self._ann.train(
                         data,
@@ -227,7 +232,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=18, window_size=(81, 54)):
+    def sliding_window(self, img, step=12, window_size=(75, 50)):
         img_h, img_w = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
@@ -237,8 +242,8 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.25, min_size=(400, 400),
-                max_size=(1100, 1100)):
+    def pyramid(self, img, scale_factor=1.25, min_size=(360, 360),
+                max_size=(1000, 1000)):
         h, w = img.shape
         min_w, min_h = min_size
         max_w, max_h = max_size

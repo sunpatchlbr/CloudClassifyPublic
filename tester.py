@@ -8,11 +8,11 @@ CLUSTERS = 14
 HIDDEN_LAYERS = [72]
 
 EPOCHS = 100
-CONF_THRESH = 0.8
-SKY_WINDOW = -0.07, 0.08
-NEG_WINDOW = -0.07, 0.08
+CONF_THRESH = 0.79
+SKY_WINDOW = -0.1, 0.06
+NEG_WINDOW = -0.06, 0.1
 
-NMS_THRESH = 0.15
+NMS_THRESH = 0.1
 
 TEST_LOCATION = '../../Data/TestPhotos/BackgroundTest/multi/'
 OUTPUT_LOCATION = '../../Data/Outputs/'
