@@ -7,7 +7,7 @@ DATA_PATH = '../../Data/TestPhotos/'
 CLASSES = ['NEG','Sky','Cumulus','Cirrus']
 NUM_CLASSES = len(CLASSES)
 
-ANN_PATH = 'ann_data.xml'
+ANN_PATH = 'ann_data.yml'
 VOCAB_PATH = 'cluster_vocab.npy'
 
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 40
@@ -95,6 +95,8 @@ class CloudClassify(object):
                 print('Loading existing training information...')
                 self.load_vocab(VOCAB_PATH)
                 self._ann.load(ANN_PATH)
+                print("trained: ", self._ann.isTrained())
+                exit(0)
             else:
                 print('Retraining...')
                 self.prepare_vocab()
