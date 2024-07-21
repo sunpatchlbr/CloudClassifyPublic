@@ -8,7 +8,7 @@ CLASSES = ['NEG','Sky','Cumulus','Cirrus']
 NUM_CLASSES = len(CLASSES)
 
 ANN_PATH = 'ann_data.xml'
-CLUSTER_PATH = 'cluster_data.xml'
+VOCAB_PATH = 'cluster_vocab.npy'
 
 BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 40
 ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 40
@@ -24,11 +24,13 @@ class CloudClassify(object):
         self._flann = None
 
         self._BOW_CLUSTERS = NUM_CLASSES * 4
+        self._vocab = None
         self._bow_kmeans_trainer = None
         self._bow_extractor = None
         
         self._ann = None
-        
+
+        #Default values
         self._EPOCHS = 20
         self._ANN_CONF_THRESHOLD = 0.3
         self._SKY_WINDOW = 0.03, 0.08
@@ -85,31 +87,53 @@ class CloudClassify(object):
             index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=6)
             search_params = {}
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
-            self._bow_kmeans_trainer = cv.BOWKMeansTrainer(self._BOW_CLUSTERS)
             self._bow_extractor = cv.BOWImgDescriptorExtractor(self._sift, self._flann)
-            for class_name in CLASSES:
-                for i in range(BOW_NUM_TRAINING_SAMPLES_PER_CLASS):
-                    path = self.get_path_data(class_name, i+1)
-                    self.add_sample(path)
-
-            voc = self._bow_kmeans_trainer.cluster()
-            print("VOCABULARY: ", voc)
-            exit(0)
-            self._bow_extractor.setVocabulary(voc)
 
             self._ann = cv.ml.ANN_MLP_create()
 
-            if not os.path.exists(TRAINED_PATH):
-                self.train()
-            else:
+            if os.path.exists(ANN_PATH) and os.path.exists(VOCAB_PATH):
                 print('Loading existing training information...')
+                self.load_vocab(VOCAB_PATH)
                 self._ann.load(ANN_PATH)
-
+            else:
+                print('Retraining...')
+                self.prepare_vocab()
+                self.train()
+                
             self._READY = True
-            print("ANN READY")
+            print("CLASSIFIER READY")
+            
+    def load_vocab(self, path):
+        self._vocab = np.load(path)
+        self._bow_extractor.setVocabulary(self._vocab)
+
+    def extract_bow_descriptors(self, img):
+        features = self._sift.detect(img)
+        return self._bow_extractor.compute(img, features)
+
+    def add_sample(self, path):
+        current = cv.imread(path, cv.IMREAD_GRAYSCALE)
+        current.astype('uint8')
+        keypoints, descriptors = self._sift.detectAndCompute(current, None)
+        if descriptors is not None:
+            self._bow_kmeans_trainer.add(descriptors)
+
+    def prepare_vocab(self):
+        print("Preparing vocab for BOW Extractor...")
+        self._bow_kmeans_trainer = cv.BOWKMeansTrainer(self._BOW_CLUSTERS)
+        
+        for class_name in CLASSES:
+            for i in range(BOW_NUM_TRAINING_SAMPLES_PER_CLASS):
+                path = self.get_path_data(class_name, i+1)
+                self.add_sample(path)
+
+        self._vocab = self._bow_kmeans_trainer.cluster()
+        self._bow_extractor.setVocabulary(self._vocab)
+        np.save(VOCAB_PATH,self._vocab)
+        print("Saving vocab for later...")
 
     def train(self):
-        print('Training...')
+        print('Training ANN on vocab...')
         self._ann.setLayerSizes(np.array(self._ANN_LAYERS))
         self._ann.setActivationFunction(cv.ml.ANN_MLP_SIGMOID_SYM, 0.6, 1.0)
         self._ann.setTrainMethod(cv.ml.ANN_MLP_BACKPROP, 0.1, 0.1)
@@ -142,18 +166,9 @@ class CloudClassify(object):
                     self._ann.train(
                         data,
                         cv.ml.ANN_MLP_NO_INPUT_SCALE | cv.ml.ANN_MLP_NO_OUTPUT_SCALE)
+
+        print("Saving ANN for later...")
         self._ann.save(ANN_PATH)
-
-    def extract_bow_descriptors(self, img):
-        features = self._sift.detect(img)
-        return self._bow_extractor.compute(img, features)
-
-    def add_sample(self, path):
-        current = cv.imread(path, cv.IMREAD_GRAYSCALE)
-        current.astype('uint8')
-        keypoints, descriptors = self._sift.detectAndCompute(current, None)
-        if descriptors is not None:
-            self._bow_kmeans_trainer.add(descriptors)
     
     def detect_and_classify(self, img, inputPath):
         if self._READY:
