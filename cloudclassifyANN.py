@@ -5,15 +5,15 @@ import itertools
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
-CLASSES = ['NEG','Sky','Cumulus','Cirrus','Stratus']
+CLASSES = ['NEG','Sky','Cumulus','Cirrus']
 NUM_CLASSES = len(CLASSES)
 
 TRAINING_SAMPLES = 'samples.npy'
 TRAINING_LABELS = 'labels.npy'
 VOCAB_PATH = 'cluster_vocab.npy'
 
-BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 42
-ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 42
+BOW_NUM_TRAINING_SAMPLES_PER_CLASS = 70
+ANN_NUM_TRAINING_SAMPLES_PER_CLASS = 70
 
 FLANN_INDEX_KDTREE = 1
 
@@ -110,6 +110,7 @@ class CloudClassify(object):
 
     def add_sample(self, path):
         current = cv.imread(path, cv.IMREAD_GRAYSCALE)
+        print("Sampling: ", path)
         current.astype('uint8')
         keypoints, descriptors = self._sift.detectAndCompute(current, None)
         if descriptors is not None:

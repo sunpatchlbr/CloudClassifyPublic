@@ -12,7 +12,7 @@ CONF_THRESH = 0.81
 SKY_WINDOW = -0.1, 0.1
 NEG_WINDOW = -0.1, 0.1
 
-NMS_THRESH = 0.05
+NMS_THRESH = 0.08
 
 TEST_LOCATION = '../../Data/TestPhotos/BackgroundTest/multi/'
 OUTPUT_LOCATION = '../../Data/Outputs/'
