@@ -5,7 +5,7 @@ import sys
 import cloudclassifyANN as cc
 
 CLUSTERS = 27
-COLORS_BINS = 8
+COLORS_BINS = 0
 INPUT_LAYERS = CLUSTERS + COLORS_BINS
 HIDDEN_LAYERS = [81]
 
