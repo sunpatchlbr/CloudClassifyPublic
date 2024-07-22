@@ -4,7 +4,7 @@ import os
 import sys
 import cloudclassifyANN as cc
 
-CLUSTERS = 14
+CLUSTERS = 21
 HIDDEN_LAYERS = [72]
 
 EPOCHS = 120
