@@ -8,7 +8,6 @@ DATA_PATH = '../../Data/TestPhotos/'
 CLASSES = ['NEG','Sky','Cumulus','Cirrus','Stratus']
 NUM_CLASSES = len(CLASSES)
 
-COLOR_DISTS = 'color_dists.npy'
 TRAINING_SAMPLES = 'samples.npy'
 TRAINING_LABELS = 'labels.npy'
 VOCAB_PATH = 'cluster_vocab.npy'
@@ -28,7 +27,7 @@ class CloudClassify(object):
 
         self._BOW_CLUSTERS = NUM_CLASSES * 4
         self._COLOR_BINS = 5
-        self._INPUT_LAYERS = self._BOW_CLUSTERS + self._COLOR_BINS
+        self._INPUT_LAYERS = self._BOW_CLUSTERS + self._COLOR_BINS*3
         self._vocab = None
         self._bow_kmeans_trainer = None
         self._bow_extractor = None
@@ -70,9 +69,11 @@ class CloudClassify(object):
         self._NEG_WINDOW = neg_window
         self._NMS_OVERLAP_THRESHOLD = nms_thresh
 
-    def set_architecture(self, clusters, inner_layers):
+    def set_architecture(self, clusters, color_bins, inner_layers):
         self._BOW_CLUSTERS = clusters
-        layers = [self._BOW_CLUSTERS]
+        self._COLOR_BINS = color_bins
+        input_layers = int(self._BOW_CLUSTERS + self._COLOR_BINS*3)
+        layers = [input_layers]
         layers.extend(inner_layers)
         layers.append(NUM_CLASSES)
         print(layers)
@@ -111,11 +112,11 @@ class CloudClassify(object):
         features = self._sift.detect(img)
         return self._bow_extractor.compute(img, features)
 
-    def add_sample(self, path):
-        current = cv.imread(path, cv.IMREAD_GRAYSCALE)
-        print("Sampling: ", path)
-        current.astype('uint8')
-        keypoints, descriptors = self._sift.detectAndCompute(current, None)
+    def add_sample_bow(self, path):
+        #print("Sampling: ", path)
+        gray = cv.imread(path, cv.IMREAD_GRAYSCALE)
+        gray.astype('uint8')
+        keypoints, descriptors = self._sift.detectAndCompute(gray, None)
         if descriptors is not None:
             self._bow_kmeans_trainer.add(descriptors)
 
@@ -126,34 +127,48 @@ class CloudClassify(object):
         for class_name in CLASSES:
             for i in range(BOW_NUM_TRAINING_SAMPLES_PER_CLASS):
                 path = self.get_path_data(class_name, i+1)
-                self.add_sample(path)
+                self.add_sample_bow(path)
 
         self._vocab = self._bow_kmeans_trainer.cluster()
         self._bow_extractor.setVocabulary(self._vocab)
-        #np.save(VOCAB_PATH,self._vocab)
+        np.save(VOCAB_PATH,self._vocab)
         print("Saving vocab for later...")
 
     def return_hists(self,roi):
         bgr_planes = cv.split(roi)
+        c = []
         blue = cv.calcHist(bgr_planes,
                            [0],
                            None,
                            [self._COLOR_BINS],
                            (0,256),
-                           accumulate=accumulate)
+                           accumulate=False)
         green = cv.calcHist(bgr_planes,
                            [1],
                            None,
                            [self._COLOR_BINS],
                            (0,256),
-                           accumulate=accumulate)
+                           accumulate=False)
         red = cv.calcHist(bgr_planes,
                            [2],
                            None,
                            [self._COLOR_BINS],
                            (0,256),
-                           accumulate=accumulate)
-        return (blue, green, red)
+                           accumulate=False)
+        c.extend(blue)
+        c.extend(green)
+        c.extend(red)
+        c = np.array(c)
+        c = c.flatten()
+        normal_c = (c-np.min(c))/(np.max(c)-np.min(c))
+        return normal_c
+
+    def get_combined_input(self,roi,descriptors):
+        colors = np.array(self.return_hists(roi))
+        combined_sample = []
+        combined_sample.extend(descriptors[0])
+        combined_sample.extend(colors)
+        return combined_sample
 
     def train(self):
         print('Training ANN on vocab...')
@@ -163,13 +178,11 @@ class CloudClassify(object):
         self._ann.setTermCriteria(
             (cv.TERM_CRITERIA_MAX_ITER | cv.TERM_CRITERIA_EPS, 100, 1.0))
 
-        #color_dists = []
         samples = []
         labels = []
 
-        if os.path.exists(COLOR_DISTS) and os.path.exists(TRAINING_SAMPLES) and os.path.exists(TRAINING_LABELS):
+        if os.path.exists(TRAINING_SAMPLES) and os.path.exists(TRAINING_LABELS):
             print("Loading existing records")
-            #color_dists = np.load(COLOR_DISTS)
             samples = np.load(TRAINING_SAMPLES)
             labels = np.load(TRAINING_LABELS)
         else:
@@ -177,25 +190,29 @@ class CloudClassify(object):
             for class_id in range(NUM_CLASSES):
                 class_name = CLASSES[class_id]
                 for i in range(ANN_NUM_TRAINING_SAMPLES_PER_CLASS):
-                    current = cv.imread(self.get_path_data(class_name, i))
+                    path = self.get_path_data(class_name, i)
+                    current = cv.imread(path)
                     descriptors = self.extract_bow_descriptors(current)
-                    #colors = return_hists()
-                    #print("HISTS: ", colors)
-                    #exit(0)
                     if descriptors is None:
                         continue
-                    sample = descriptors[0]
-                    #color_hists.append(colors)
-                    samples.append(sample)
+                    colors = np.array(self.return_hists(current))
+                    combined_sample = []
+                    combined_sample.extend(descriptors[0])
+                    combined_sample.extend(colors)
+                    combined_sample = self.get_combined_input(current)
+                    samples.append(combined_sample)
                     labels.append([class_id])
             samples = np.array(samples,np.float32)
             labels = np.array(labels,np.float32)
-            #np.save(TRAINING_SAMPLES,samples)
-            #np.save(TRAINING_LABELS,labels)
+            
+            np.save(TRAINING_SAMPLES,samples)
+            np.save(TRAINING_LABELS,labels)
+            
             print("Records saved...")
 
         for e in range(self._EPOCHS):
             for sample, class_id in zip(samples, labels):
+                sample = np.array(sample,np.float32)
                 identity = np.array(np.zeros(NUM_CLASSES),np.float32)
                 identity[int(class_id)] = 1.0
                 data = cv.ml.TrainData_create(sample, cv.ml.COL_SAMPLE, identity)
@@ -220,10 +237,8 @@ class CloudClassify(object):
                 scale = original_img.shape[0] / float(resized.shape[0])
                 print("scale: ", resized.shape)
                 for x, y, roi in self.sliding_window(resized):
-                    descriptors = self.extract_bow_descriptors(roi)
-                    if descriptors is None:
-                        continue
-                    prediction = self._ann.predict(descriptors)
+                    combined_input = self.get_combined_input(roi)
+                    prediction = self._ann.predict(combined_input)
                     class_id = int(prediction[0])
                     confidence = prediction[1][0][class_id]
                     sky_conf = prediction[1][0][1]
