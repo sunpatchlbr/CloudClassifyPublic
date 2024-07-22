@@ -5,7 +5,7 @@ import itertools
 from non_max_suppression import non_max_suppression_fast as nms
 
 DATA_PATH = '../../Data/TestPhotos/'
-CLASSES = ['NEG','Sky','Cumulus','Cirrus']
+CLASSES = ['NEG','Sky','Cumulus','Cirrus','Stratus']
 NUM_CLASSES = len(CLASSES)
 
 TRAINING_SAMPLES = 'samples.npy'
