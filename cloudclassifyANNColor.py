@@ -86,7 +86,7 @@ class CloudClassify(object):
             exit(1)
         else:
             self._sift = cv.xfeatures2d.SIFT_create()
-            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=9)
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=11)
             search_params = {}
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
             self._bow_extractor = cv.BOWImgDescriptorExtractor(self._sift, self._flann)
@@ -278,6 +278,8 @@ class CloudClassify(object):
                 if counts[i] > current_max:
                     current_max = counts[i]
                     predominant_id = i
+            print("PREDOMINANT: ", CLASSES[predominant_id])
+            print("COUNTS: ", counts)
             predominant_text = "PREDOMINANT: " + \
                                CLASSES[int(predominant_id)] + ": " + \
                                ('%.2f' % current_max)
@@ -289,7 +291,7 @@ class CloudClassify(object):
             exit(1)
         
 
-    def sliding_window(self, img, step=12, window_size=(75, 50)):
+    def sliding_window(self, img, step=10, window_size=(75, 50)):
         img_h, img_w, channels = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):

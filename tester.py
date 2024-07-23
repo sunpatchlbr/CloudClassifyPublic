@@ -6,15 +6,15 @@ import cloudclassifyANNColor as cc
 import itertools
 
 CLUSTERS = 21
-COLOR_BINS = 16 # per color channel
+COLOR_BINS = 23 # per color channel
 HIDDEN_LAYERS = [90]
 
-EPOCHS = 130
-CONF_THRESH = 0.77
-SKY_WINDOW = -0.2, 0.2
-NEG_WINDOW = -0.2, 0.2
+EPOCHS = 300
+CONF_THRESH = 0.75
+SKY_WINDOW = -0.13, 0.13
+NEG_WINDOW = -0.13, 0.13
 
-NMS_THRESH = 0.2
+NMS_THRESH = 0.25
 
 NUM_TESTS = 15
 ANN_CLASSES = ['NEG','Sky','Cumulus','Cirrus','Stratus']
@@ -38,7 +38,7 @@ def test_class(class_name):
     unobstructed_accuracy = 0.0
     u_total = 0.0
     for i in range(NUM_TESTS):
-        print("Testing ", i+1)
+        print("Testing ", class_name, " ", i+1)
         u_file = "UNOBSTRUCTED/" + class_name + str(i+1) + ".JPG"
         o_file = "OBSTRUCTED/" + class_name + str(i+1) + ".JPG"
         u_path = TEST_LOCATION + u_file
