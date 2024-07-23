@@ -160,15 +160,17 @@ class CloudClassify(object):
         c.extend(red)
         c = np.array(c)
         c = c.flatten()
-        normal_c = (c-np.min(c))/(np.max(c)-np.min(c))
+        #normal_c = (c-np.min(c))/(np.max(c)-np.min(c))
+        length = np.linalg.norm(c)
+        normal_c = c/length
         return normal_c
 
     def get_combined_input(self,roi,descriptors):
         colors = np.array(self.return_hists(roi))
         combined_sample = []
-        combined_sample.extend(descriptors[0])
+        combined_sample.extend(descriptors)
         combined_sample.extend(colors)
-        return combined_sample
+        return np.array(combined_sample,np.float32)
 
     def train(self):
         print('Training ANN on vocab...')
@@ -195,11 +197,7 @@ class CloudClassify(object):
                     descriptors = self.extract_bow_descriptors(current)
                     if descriptors is None:
                         continue
-                    colors = np.array(self.return_hists(current))
-                    combined_sample = []
-                    combined_sample.extend(descriptors[0])
-                    combined_sample.extend(colors)
-                    combined_sample = self.get_combined_input(current)
+                    combined_sample = self.get_combined_input(current,descriptors[0])
                     samples.append(combined_sample)
                     labels.append([class_id])
             samples = np.array(samples,np.float32)
@@ -230,15 +228,20 @@ class CloudClassify(object):
     def detect_and_classify(self, img, inputPath):
         if self._READY:
             print("Detecting and classifying clouds in sky...")
-            gray_img = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
             original_img = cv.imread(inputPath)
             pos_rects = []
-            for resized in self.pyramid(gray_img):
+            for resized in self.pyramid(img):
                 scale = original_img.shape[0] / float(resized.shape[0])
-                print("scale: ", resized.shape)
+                #print("scale: ", resized.shape)
                 for x, y, roi in self.sliding_window(resized):
-                    combined_input = self.get_combined_input(roi)
-                    prediction = self._ann.predict(combined_input)
+                    descriptors = self.extract_bow_descriptors(roi)
+                    if descriptors is None:
+                        continue
+                    combined_input = self.get_combined_input(roi,descriptors[0])
+                    #print("LAYERS: ", self._ann.getLayerSizes())
+                    #print("INPUT: ", combined_input)
+                    #print("Shape: ", combined_input.shape)
+                    prediction = self._ann.predict(np.array([combined_input]))
                     class_id = int(prediction[0])
                     confidence = prediction[1][0][class_id]
                     sky_conf = prediction[1][0][1]
@@ -248,7 +251,7 @@ class CloudClassify(object):
                          and sky_conf > self._SKY_WINDOW[0]
                          and neg_conf < self._NEG_WINDOW[1]
                          and neg_conf > self._NEG_WINDOW[0] ):
-                        h, w = roi.shape
+                        h, w, channels = roi.shape
                         pos_rects.append(
                             [int(x * scale),
                              int(y * scale),
@@ -259,33 +262,46 @@ class CloudClassify(object):
                              neg_conf,
                              class_id])
             pos_rects = nms(np.array(pos_rects), self._NMS_OVERLAP_THRESHOLD)
+            counts = np.zeros(NUM_CLASSES, dtype=float)
             for x0, y0, x1, y1, score, sky_conf, neg_conf, class_id in pos_rects:
                 cv.rectangle(original_img, (int(x0), int(y0)), (int(x1), int(y1)),
-                              (100, 255, 100), 4)
+                              (10, 220, 255), 4)
                 text = CLASSES[int(class_id)] + ' ' \
                     + ('%.2f' % score) + ' ' + ('%.2f' % sky_conf) \
                     + ' ' + ('%.2f' % neg_conf)
+                counts[int(class_id)] += (float(x1-x0) * score)
                 cv.putText(original_img, text, (int(x0), int(y0) + 20),
-                            cv.FONT_HERSHEY_SIMPLEX, 1, (100, 255, 100), 4)
-            return original_img
+                            cv.FONT_HERSHEY_SIMPLEX, 1, (10, 220, 255), 4)
+            predominant_id = 0
+            current_max = 0.0
+            for i in range(NUM_CLASSES):
+                if counts[i] > current_max:
+                    current_max = counts[i]
+                    predominant_id = i
+            predominant_text = "PREDOMINANT: " + \
+                               CLASSES[int(predominant_id)] + ": " + \
+                               ('%.2f' % current_max)
+            cv.putText(original_img, predominant_text, (20,120),
+                       cv.FONT_HERSHEY_SIMPLEX, 4, (20, 255, 50), 8)
+            return original_img, int(predominant_id)
         else:
             print("not trained")
             exit(1)
         
 
-    def sliding_window(self, img, step=12, window_size=(75, 50)):
-        img_h, img_w = img.shape
+    def sliding_window(self, img, step=10, window_size=(75, 50)):
+        img_h, img_w, channels = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
             for x in range(0, img_h, step):
                 roi = img[y:y+window_h, x:x+window_w]
-                roi_h, roi_w = roi.shape
+                roi_h, roi_w, channels = roi.shape
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
     def pyramid(self, img, scale_factor=1.25, min_size=(200, 200),
                 max_size=(700, 700)):
-        h, w = img.shape
+        h, w, channels = img.shape
         min_w, min_h = min_size
         max_w, max_h = max_size
         while w >= min_w and h >= min_h:

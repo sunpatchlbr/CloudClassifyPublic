@@ -223,6 +223,8 @@ class CloudClassify(object):
                     descriptors = self.extract_bow_descriptors(roi)
                     if descriptors is None:
                         continue
+                    print("INPUT: ", descriptors)
+                    exit(0)
                     prediction = self._ann.predict(descriptors)
                     class_id = int(prediction[0])
                     confidence = prediction[1][0][class_id]
