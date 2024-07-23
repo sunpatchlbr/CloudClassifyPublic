@@ -269,7 +269,7 @@ class CloudClassify(object):
                 text = CLASSES[int(class_id)] + ' ' \
                     + ('%.2f' % score) + ' ' + ('%.2f' % sky_conf) \
                     + ' ' + ('%.2f' % neg_conf)
-                counts[int(class_id)] += (float(x1-x0) * score)
+                counts[int(class_id)] += (float(x1-x0)) #* score)
                 cv.putText(original_img, text, (int(x0), int(y0) + 20),
                             cv.FONT_HERSHEY_SIMPLEX, 1, (10, 220, 255), 4)
             predominant_id = 0
@@ -282,14 +282,14 @@ class CloudClassify(object):
                                CLASSES[int(predominant_id)] + ": " + \
                                ('%.2f' % current_max)
             cv.putText(original_img, predominant_text, (20,120),
-                       cv.FONT_HERSHEY_SIMPLEX, 4, (20, 255, 50), 8)
+                       cv.FONT_HERSHEY_SIMPLEX, 2, (20, 255, 50), 4)
             return original_img, int(predominant_id)
         else:
             print("not trained")
             exit(1)
         
 
-    def sliding_window(self, img, step=10, window_size=(75, 50)):
+    def sliding_window(self, img, step=12, window_size=(75, 50)):
         img_h, img_w, channels = img.shape
         window_w, window_h = window_size
         for y in range(0, img_w, step):
