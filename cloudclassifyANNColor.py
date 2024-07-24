@@ -86,7 +86,7 @@ class CloudClassify(object):
             exit(1)
         else:
             self._sift = cv.xfeatures2d.SIFT_create()
-            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=7)
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=9)
             search_params = {}
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
             self._bow_extractor = cv.BOWImgDescriptorExtractor(self._sift, self._flann)
@@ -227,20 +227,17 @@ class CloudClassify(object):
     
     def detect_and_classify(self, img, inputPath):
         if self._READY:
-            print("Detecting and classifying clouds in sky...")
+            print("Detecting and Classifying ", inputPath)
             original_img = cv.imread(inputPath)
             pos_rects = []
             for resized in self.pyramid(img):
                 scale = original_img.shape[0] / float(resized.shape[0])
-                #print("scale: ", resized.shape)
+                print("scale: ", resized.shape)
                 for x, y, roi in self.sliding_window(resized):
                     descriptors = self.extract_bow_descriptors(roi)
                     if descriptors is None:
                         continue
                     combined_input = self.get_combined_input(roi,descriptors[0])
-                    #print("LAYERS: ", self._ann.getLayerSizes())
-                    #print("INPUT: ", combined_input)
-                    #print("Shape: ", combined_input.shape)
                     prediction = self._ann.predict(np.array([combined_input]))
                     class_id = int(prediction[0])
                     confidence = prediction[1][0][class_id]
@@ -302,7 +299,7 @@ class CloudClassify(object):
                     yield (x, y, roi)
 
     def pyramid(self, img, scale_factor=1.2, min_size=(200, 200),
-                max_size=(650, 650)):
+                max_size=(700, 700)):
         h, w, channels = img.shape
         min_w, min_h = min_size
         max_w, max_h = max_size

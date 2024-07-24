@@ -5,20 +5,20 @@ import sys
 import cloudclassifyANNColor as cc
 import itertools
 
-CLUSTERS = 23
-COLOR_BINS = 36 # per color channel
-HIDDEN_LAYERS = [87]
+CLUSTERS = 21
+COLOR_BINS = 28 # per color channel
+HIDDEN_LAYERS = [75]
 
 EPOCHS = 300
-CONF_THRESH = 0.76
-SKY_WINDOW = -0.11, 0.11
-NEG_WINDOW = -0.11, 0.11
+CONF_THRESH = 0.8
+SKY_WINDOW = -0.12, 0.12
+NEG_WINDOW = -0.12, 0.12
 
 NMS_THRESH = 0.18
 
 NUM_TESTS = 15
 ANN_CLASSES = ['NEG','Sky','Cumulus','Cirrus','Stratus']
-TEST_CLASSES = ['Cirrus', 'Cumulus', 'Stratus']
+TEST_CLASSES = ['Cirrus','Cumulus','Stratus']
 TEST_LOCATION = '../../Data/TestPhotos/TESTS/'
 OUTPUT_LOCATION = '../../Data/Outputs/'
 
