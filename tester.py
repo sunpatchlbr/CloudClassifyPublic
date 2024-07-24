@@ -5,16 +5,16 @@ import sys
 import cloudclassifyANNColor as cc
 import itertools
 
-CLUSTERS = 21
-COLOR_BINS = 23 # per color channel
-HIDDEN_LAYERS = [90]
+CLUSTERS = 23
+COLOR_BINS = 36 # per color channel
+HIDDEN_LAYERS = [87]
 
 EPOCHS = 300
-CONF_THRESH = 0.75
-SKY_WINDOW = -0.13, 0.13
-NEG_WINDOW = -0.13, 0.13
+CONF_THRESH = 0.76
+SKY_WINDOW = -0.11, 0.11
+NEG_WINDOW = -0.11, 0.11
 
-NMS_THRESH = 0.25
+NMS_THRESH = 0.18
 
 NUM_TESTS = 15
 ANN_CLASSES = ['NEG','Sky','Cumulus','Cirrus','Stratus']
@@ -31,7 +31,7 @@ cloud.set_parameters(
     nms_thresh = NMS_THRESH)
 cloud.set_architecture(CLUSTERS, COLOR_BINS, HIDDEN_LAYERS)
 cloud.prepare()
-
+ 
 def test_class(class_name):
     obstructed_accuracy = 0.0
     o_total = 0.0
@@ -63,6 +63,19 @@ accuracies = []
 for class_name in TEST_CLASSES:
     un, ob = test_class(class_name)
     accuracies.append([un, ob])
+
+print()
+print("Parameters: ")
+print("BOW Clusters: ", CLUSTERS)
+print("Bins per channel: ", COLOR_BINS)
+print("Hidden layers: ", HIDDEN_LAYERS)
+print("Epochs: ", 300)
+print("Confidence threshold: ",  CONF_THRESH)
+print("Sky tolerances: ", SKY_WINDOW)
+print("Negative tolerances: ", NEG_WINDOW)
+print("NMS Thresh: ", NMS_THRESH)
+print()
+print()
 
 print("Final Accuracies: ")
 print()

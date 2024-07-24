@@ -86,7 +86,7 @@ class CloudClassify(object):
             exit(1)
         else:
             self._sift = cv.xfeatures2d.SIFT_create()
-            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=11)
+            index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=7)
             search_params = {}
             self._flann = cv.FlannBasedMatcher(index_params, search_params)
             self._bow_extractor = cv.BOWImgDescriptorExtractor(self._sift, self._flann)
@@ -301,8 +301,8 @@ class CloudClassify(object):
                 if roi_w == window_w and roi_h == window_h:
                     yield (x, y, roi)
 
-    def pyramid(self, img, scale_factor=1.25, min_size=(200, 200),
-                max_size=(700, 700)):
+    def pyramid(self, img, scale_factor=1.2, min_size=(200, 200),
+                max_size=(650, 650)):
         h, w, channels = img.shape
         min_w, min_h = min_size
         max_w, max_h = max_size
