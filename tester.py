@@ -4,6 +4,8 @@ import os
 import sys
 import cloudclassifyANNColor as cc
 import itertools
+import matplotlib.pyplot as plt
+from sklearn import metrics
 
 CLUSTERS = 21
 COLOR_BINS = 28 # per color channel
@@ -22,6 +24,9 @@ TEST_CLASSES = ['Cirrus','Cumulus','Stratus']
 TEST_LOCATION = '../../Data/TestPhotos/TESTS/'
 OUTPUT_LOCATION = '../../Data/Outputs/'
 
+actual = []
+predicted = []
+
 cloud = cc.CloudClassify()
 cloud.set_parameters(
     epochs = EPOCHS,
@@ -36,7 +41,7 @@ def test_class(class_name):
     obstructed_accuracy = 0.0
     o_total = 0.0
     unobstructed_accuracy = 0.0
-    u_total = 0.0
+    u_total = 0.05
     for i in range(NUM_TESTS):
         print("Testing ", class_name, " ", i+1)
         u_file = "UNOBSTRUCTED/" + class_name + str(i+1) + ".JPG"
@@ -44,10 +49,16 @@ def test_class(class_name):
         u_path = TEST_LOCATION + u_file
         o_path = TEST_LOCATION + o_file
         #print("Testing ",u_path)
+        
         u_output, u_predominant = cloud.run(u_path)
+        actual.append(class_name)
+        predicted.append(ANN_CLASSES[u_predominant])
         if (ANN_CLASSES[u_predominant] == class_name):
             u_total += 1.0
+            
         o_output, o_predominant = cloud.run(o_path)
+        actual.append(class_name)
+        predicted.append(ANN_CLASSES[o_predominant])
         if (ANN_CLASSES[o_predominant] == class_name):
             o_total += 1.0
         cv.imwrite(OUTPUT_LOCATION+u_file, u_output)
@@ -83,3 +94,13 @@ for accs, class_name in zip(accuracies, TEST_CLASSES):
     print(class_name, " unobstructed: ", accs[0])
     print(class_name, " obstructed: ", accs[1])
     print()
+
+print("actual: ", actual)
+print("predicted: ", predicted)
+
+print("Confusion Matrix: ")
+confusion_matrix = metrics.confusion_matrix(actual, predicted, labels=ANN_CLASSES)
+cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix = confusion_matrix,
+                                            display_labels=ANN_CLASSES)
+cm_display.plot()
+plt.show()
