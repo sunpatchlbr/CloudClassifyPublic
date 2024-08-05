@@ -86,21 +86,84 @@ print("Sky tolerances: ", SKY_WINDOW)
 print("Negative tolerances: ", NEG_WINDOW)
 print("NMS Thresh: ", NMS_THRESH)
 print()
-print()
+print() 
 
-print("Final Accuracies: ")
+print("Final Sensitivites within class tests ( TP / ( TP + FN ) ): ")
 print()
 for accs, class_name in zip(accuracies, TEST_CLASSES):
     print(class_name, " unobstructed: ", accs[0])
     print(class_name, " obstructed: ", accs[1])
     print()
 
-print("actual: ", actual)
-print("predicted: ", predicted)
+print()
+print("Calculating Confusion Matrices and Metrics...")
+print()
 
-print("Confusion Matrix: ")
-confusion_matrix = metrics.confusion_matrix(actual, predicted, labels=ANN_CLASSES)
+#calculate matrices
+confusion_matrix = metrics.confusion_matrix(actual,
+                                            predicted,
+                                            labels=ANN_CLASSES)
+
+individuals = metrics.multilabel_confusion_matrix(actual,
+                                                  predicted,
+                                                  labels=ANN_CLASSES)
+
+# each class against each class
 cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix = confusion_matrix,
                                             display_labels=ANN_CLASSES)
+
+def print_metrics(class_name, confusion_mat):
+    [ [TN,FP],
+      [FN, TP] ] = confusion_mat
+    print(class_name)
+    print()
+    TOTAL = TN + FP + FN + TP
+    accuracy = ( ( TP + TN ) / TOTAL )
+    print("Accuracy ( ( TP + TN ) / TOTAL ): ", accuracy)
+    precision = ( TP / ( TP + FP ) )
+    print("Precision ( TP / ( TP + FP ) ): ", precision)
+    sensitivity = ( TP / ( TP + FN ) )
+    print("Sensitivity ( TP / ( TP + FN ) ): ", sensitivity)
+    specificity = ( TN / ( TN + FP ) )
+    print("Specificity ( TN / ( TN + FP ) ): ", specificity)
+    print()
+    print()
+    return np.array([accuracy, precision, sensitivity, specificity], dtype=float)
+    
+
+print("Individual Metrics: ")
+print()
+# individual cms, normalized
+
+mets = []
+
+cirrus_cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix=individuals[3],
+                                            display_labels=['Other','Cirrus'])
+mets.append(print_metrics('Cirrus',individuals[3]))
+
+cumulus_cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix=individuals[2],
+                                            display_labels=['Other','Cumulus'])
+mets.append(print_metrics('Cumulus',individuals[2]))
+
+stratus_cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix=individuals[4],
+                                            display_labels=['Other','Stratus'])
+mets.append(print_metrics('Stratus',individuals[4]))
+
+mets = np.sum(mets, axis=0)
+mets = np.divide(mets, 3.0)
+
+# overall metrics
+print("Overall metrics: ")
+print("Average Accuracy: ", mets[0])
+print("Average Precision: ", mets[1])
+print("Average Sensitivity: ", mets[2])
+print("Average Specificity: ", mets[3])
+
+
+# plot
 cm_display.plot()
+cirrus_cm_display.plot()
+cumulus_cm_display.plot()
+stratus_cm_display.plot()
+
 plt.show()
